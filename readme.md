@@ -22,7 +22,6 @@ Supported algorithms in the GUARD Safe RL library include:
 - [Primal-Dual Optimization (PDO)](https://arxiv.org/abs/1512.01629) (not in paper)
 - [State-wise Constrained Policy Optimization (SCPO)] (not in paper)
   - To download SCPO code, run `git submodule update --init --recursive` after cloning this repo.
-  - To keep SCPO up-to-date, run `git submodule update --remote`.
 
 **Hierarchical**
 - [TRPO-Safety Layer (SL)](https://arxiv.org/abs/1801.08757)
