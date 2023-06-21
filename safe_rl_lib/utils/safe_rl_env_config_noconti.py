@@ -230,7 +230,7 @@ def configuration(task, args):
 
     if task == "swimmertiny1_pillar_noconti":
         config = {
-            'robot_base': 'xmls/swimmer_tiny.xml', # dt in xml, default 0.002s for point
+            'robot_base': 'xmls/swimmer.xml', # dt in xml, default 0.002s for point
             'task': 'goal',
             'observation_flatten': True,  # Flatten observation into a vector
             'observe_sensors': True,  # Observe all sensor data from simulator
@@ -284,7 +284,7 @@ def configuration(task, args):
         
     if task == "swimmertiny4_pillar_noconti":
         config = {
-            'robot_base': 'xmls/swimmer_tiny.xml', # dt in xml, default 0.002s for point
+            'robot_base': 'xmls/swimmer.xml', # dt in xml, default 0.002s for point
             'task': 'goal',
             'observation_flatten': True,  # Flatten observation into a vector
             'observe_sensors': True,  # Observe all sensor data from simulator
@@ -338,7 +338,7 @@ def configuration(task, args):
         
     if task == "swimmertiny4_pillar":
         config = {
-            'robot_base': 'xmls/swimmer_tiny.xml', # dt in xml, default 0.002s for point
+            'robot_base': 'xmls/swimmer.xml', # dt in xml, default 0.002s for point
             'task': 'goal',
             'observation_flatten': True,  # Flatten observation into a vector
             'observe_sensors': True,  # Observe all sensor data from simulator
@@ -392,7 +392,7 @@ def configuration(task, args):
         
     if task == "swimmertiny8_pillar_noconti":
         config = {
-            'robot_base': 'xmls/swimmer_tiny.xml', # dt in xml, default 0.002s for point
+            'robot_base': 'xmls/swimmer.xml', # dt in xml, default 0.002s for point
             'task': 'goal',
             'observation_flatten': True,  # Flatten observation into a vector
             'observe_sensors': True,  # Observe all sensor data from simulator
@@ -446,7 +446,7 @@ def configuration(task, args):
         
     if task == "swimmertiny8_pillar":
         config = {
-            'robot_base': 'xmls/swimmer_tiny.xml', # dt in xml, default 0.002s for point
+            'robot_base': 'xmls/swimmer.xml', # dt in xml, default 0.002s for point
             'task': 'goal',
             'observation_flatten': True,  # Flatten observation into a vector
             'observe_sensors': True,  # Observe all sensor data from simulator
@@ -900,7 +900,7 @@ def configuration(task, args):
 
     if task == "swimmertiny1_noconti":
         config = {
-            'robot_base': 'xmls/swimmer_tiny.xml', # dt in xml, default 0.002s for point
+            'robot_base': 'xmls/swimmer.xml', # dt in xml, default 0.002s for point
             'task': 'goal',
             'observation_flatten': True,  # Flatten observation into a vector
             'observe_sensors': True,  # Observe all sensor data from simulator
@@ -956,7 +956,7 @@ def configuration(task, args):
 
     if task == "swimmertiny4_noconti":
         config = {
-            'robot_base': 'xmls/swimmer_tiny.xml', # dt in xml, default 0.002s for point
+            'robot_base': 'xmls/swimmer.xml', # dt in xml, default 0.002s for point
             'task': 'goal',
             'observation_flatten': True,  # Flatten observation into a vector
             'observe_sensors': True,  # Observe all sensor data from simulator
@@ -1012,7 +1012,7 @@ def configuration(task, args):
 
     if task == "swimmertiny8_noconti":
         config = {
-            'robot_base': 'xmls/swimmer_tiny.xml', # dt in xml, default 0.002s for point
+            'robot_base': 'xmls/swimmer.xml', # dt in xml, default 0.002s for point
             'task': 'goal',
             'observation_flatten': True,  # Flatten observation into a vector
             'observe_sensors': True,  # Observe all sensor data from simulator
@@ -1068,7 +1068,7 @@ def configuration(task, args):
         
     if task == "swimmertiny8":
         config = {
-            'robot_base': 'xmls/swimmer_tiny.xml', # dt in xml, default 0.002s for point
+            'robot_base': 'xmls/swimmer.xml', # dt in xml, default 0.002s for point
             'task': 'goal',
             'observation_flatten': True,  # Flatten observation into a vector
             'observe_sensors': True,  # Observe all sensor data from simulator
@@ -1124,7 +1124,7 @@ def configuration(task, args):
 
     if task == "anttiny8_noconti":
         config = {
-            'robot_base': 'xmls/ant_tiny.xml', # dt in xml, default 0.002s for point
+            'robot_base': 'xmls/ant.xml', # dt in xml, default 0.002s for point
             'task': 'goal',
             'observation_flatten': True,  # Flatten observation into a vector
             'observe_sensors': True,  # Observe all sensor data from simulator
@@ -1180,7 +1180,7 @@ def configuration(task, args):
 
     if task == "anttiny8":
         config = {
-            'robot_base': 'xmls/ant_tiny.xml', # dt in xml, default 0.002s for point
+            'robot_base': 'xmls/ant.xml', # dt in xml, default 0.002s for point
             'task': 'goal',
             'observation_flatten': True,  # Flatten observation into a vector
             'observe_sensors': True,  # Observe all sensor data from simulator
@@ -1236,7 +1236,7 @@ def configuration(task, args):
 
     if task == "walker8_noconti":
         config = {
-            'robot_base': 'xmls/walker3d_tiny.xml', # dt in xml, default 0.002s for point
+            'robot_base': 'xmls/walker.xml', # dt in xml, default 0.002s for point
             'task': 'goal',
             'observation_flatten': True,  # Flatten observation into a vector
             'observe_sensors': True,  # Observe all sensor data from simulator
@@ -1293,7 +1293,7 @@ def configuration(task, args):
         
     if task == "walker8":
         config = {
-            'robot_base': 'xmls/walker3d_tiny.xml', # dt in xml, default 0.002s for point
+            'robot_base': 'xmls/walker.xml', # dt in xml, default 0.002s for point
             'task': 'goal',
             'observation_flatten': True,  # Flatten observation into a vector
             'observe_sensors': True,  # Observe all sensor data from simulator
