@@ -12,6 +12,7 @@ from utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs, mpi_sum
 from  safe_rl_envs.envs.engine import Engine as  safe_rl_envs_Engine
 from utils.safe_rl_env_config import configuration
+# from utils.safe_rl_env_config_noconti import configuration # comment line 14 and uncomment this line if you want to test on episodic tasks (SCPO related experiments)
 import os.path as osp
 
 device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")

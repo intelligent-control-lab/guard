@@ -10,6 +10,7 @@ import time
  
 from  safe_rl_envs.envs.engine import Engine as  safe_rl_envs_Engine
 from utils.safe_rl_env_config import configuration
+# from utils.safe_rl_env_config_noconti import configuration # comment line 14 and uncomment this line if you want to test on episodic tasks (SCPO related experiments)
 import os.path as osp
 import cv2
 import matplotlib.pyplot as plt
