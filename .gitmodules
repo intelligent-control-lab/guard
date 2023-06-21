@@ -1,0 +1,3 @@
+[submodule "safe_rl_lib/StateWise_Constrained_Policy_Optimization"]
+	path = safe_rl_lib/StateWise_Constrained_Policy_Optimization
+	url = git@github.com:intelligent-control-lab/StateWise_Constrained_Policy_Optimization.git
