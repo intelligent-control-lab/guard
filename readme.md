@@ -38,9 +38,16 @@ GUARD testing suite supports the following agents:
 
 GUARD testing suite supports the following tasks:
 - Goal
+<img src="https://github.com/intelligent-control-lab/guard/assets/91172531/97270fed-af6d-44e0-b246-71845aba1932" width="400"/>
+
 - Push
+<img src="https://github.com/intelligent-control-lab/guard/assets/91172531/c3b304cc-c32f-4ea5-9328-2c6e48f26a11" width="400"/>
+
 - Chase
+<img src="https://github.com/intelligent-control-lab/guard/assets/91172531/b54a50d2-fd67-4532-8560-c803de4bf269" width="400"/>
+
 - Defense
+<img src="https://github.com/intelligent-control-lab/guard/assets/91172531/03b48a0c-1d5e-4fa8-a6d7-782a475ad5e8" width="400"/>
 
 GUARD testing suite supports the following safety constraints (obstacles):
 - 3D Hazards
