@@ -73,6 +73,8 @@ Afterwards, install environment:
 conda create --name venv --file requirements.txt
 ```
 
+<kbd style="background-color:black; color:green;">Your text goes here</kbd>
+
 Lastly, install `safe_rl_envs` by:
 
 ```
