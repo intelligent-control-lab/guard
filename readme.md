@@ -73,7 +73,7 @@ Afterwards, install environment:
 conda create --name venv --file requirements.txt
 ```
 
-<kbd style="background-color:black; color:green;">Your text goes here</kbd>
+- ![#c5f015](https://placehold.co/15x15/c5f015/c5f015.png) Note that if error reports while installing conda environment. You may choose to first comment the unsupported package, then use `pip install` to install those packages manually. 
 
 Lastly, install `safe_rl_envs` by:
 
