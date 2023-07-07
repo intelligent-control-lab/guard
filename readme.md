@@ -68,17 +68,19 @@ For full options, please see the paper.
 
 Install [mujoco_py](https://github.com/openai/mujoco-py), see the mujoco_py documentation for details. Note that mujoco_py **requires Python 3.6 or greater**.
 
-Afterwards, simply install `safe_rl_envs` by:
+Afterwards, install environment:
+```
+conda create --name venv --file requirements.txt
+```
+
+Lastly, install `safe_rl_envs` by:
 
 ```
 cd safe_rl_envs
 pip install -e .
 ```
 
-Install environment:
-```
-conda create --name venv --file requirements.txt
-```
+
 ---
 ## Quick Start
 ### 1. Environment Configuration
