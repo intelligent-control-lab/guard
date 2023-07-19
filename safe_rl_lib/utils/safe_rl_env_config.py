@@ -1,10 +1,8 @@
-
-def configuration(task):
+def configuration_list(task):
     """
     configuration for customized environment for safety gym 
     """
-    ################ Goal Tasks #################
-
+    ################ Goal Tasks #################        
     if task == "Goal_Point_8Hazards":
         config = {
             # robot setting
@@ -2376,3 +2374,31 @@ def configuration(task):
     
     
     return config
+
+def configuration(task):
+    try:
+        return configuration_list(task)
+    except:
+        # task name should be in the form of: 
+        # <Task>_<Robot>_<Num><Constraint Type> or 
+        # <Task>_<Robot>_<Num><Constraint_Type>_noconti
+        task_split = task.split("_")
+        Task = task_split[0]
+        Robot = task_split[1] 
+        Constraints = task_split[2]
+        Continue = True
+        if len(task_split) >=4 and task_split[3] == 'noconti':
+            Continue = False
+        N = 0
+        Type = ""
+        for i in range(len(Constraints)):
+            if not Constraints[i].isdigit():
+                N = int(Constraints[:i])
+                Type = Constraints[i:]
+                break
+        new_task = Task + "_" + Robot  + "_" + "8" + Type 
+        config = configuration(new_task)
+        config['continue_goal'] = Continue
+        config[Type.lower() + '_num'] = N
+        return config
+    
