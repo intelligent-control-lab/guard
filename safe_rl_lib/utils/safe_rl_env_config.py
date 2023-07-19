@@ -1,6 +1,14 @@
 def configuration_list(task):
     """
-    configuration for customized environment for safety gym 
+    Configuration for customized environment for safety gym 
+    
+    ================== Special Intructions for SCPO Related Experiment ==================
+    Use configuration for non-continuous environment, meaning episodic tasks.
+    Task options should be followed with 'noconti' 
+    Refer to the set of tested suites in State-wise Constrained Policy Optimization paper
+    Note:   task named "TASK_noconti" should be used for training, the corresponding task named "TASK" 
+            should be used for video visualization. For example: 'Goal_Point_8Hazards_noconti' for training
+            and 'Goal_Point_8Hazards' for video visulization.
     """
     ################ Goal Tasks #################        
     if task == "Goal_Point_8Hazards":
