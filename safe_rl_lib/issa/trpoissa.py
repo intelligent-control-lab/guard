@@ -6,7 +6,7 @@ from torch.optim import Adam
 import gym
 import time
 import copy
-import trpo_core as core
+import trpoissa_core as core
 from utils.logx import EpochLogger, setup_logger_kwargs, colorize
 from utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs, mpi_sum
@@ -17,28 +17,27 @@ import os.path as osp
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 EPS = 1e-8
 
-class TRPOBuffer:
+class ISSABuffer:
     """
-    A buffer for storing trajectories experienced by a TRPO agent interacting
+    A buffer for storing trajectories experienced by a ISSA agent interacting
     with the environment, and using Generalized Advantage Estimation (GAE-Lambda)
     for calculating the advantages of state-action pairs.
     """
 
-    def __init__(self, obs_dim, act_dim, size, gamma=0.99, lam=0.95, act_n=1):
+    def __init__(self, obs_dim, act_dim, size, gamma=0.99, lam=0.95):
         self.obs_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
         self.act_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
-        self.discounted_adv_buf = np.zeros(size, dtype=np.float32)
+        self.adv_buf = np.zeros(size, dtype=np.float32)
         self.rew_buf = np.zeros(size, dtype=np.float32)
         self.ret_buf = np.zeros(size, dtype=np.float32)
         self.val_buf = np.zeros(size, dtype=np.float32)
         self.logp_buf = np.zeros(size, dtype=np.float32)
         self.mu_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
         self.logstd_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
-        self.logits_buf = np.zeros(core.combined_shape(size, act_n), dtype=np.float32)
         self.gamma, self.lam = gamma, lam
         self.ptr, self.path_start_idx, self.max_size = 0, 0, size
 
-    def store(self, obs, act, rew, val, logp, mu=np.nan, logstd=np.nan, logits=np.nan):
+    def store(self, obs, act, rew, val, logp, mu, logstd):
         """
         Append one timestep of agent-environment interaction to the buffer.
         """
@@ -50,7 +49,6 @@ class TRPOBuffer:
         self.logp_buf[self.ptr] = logp
         self.mu_buf[self.ptr] = mu
         self.logstd_buf[self.ptr] = logstd
-        self.logits_buf[self.ptr] = logits
         self.ptr += 1
 
     def finish_path(self, last_val=0):
@@ -75,7 +73,7 @@ class TRPOBuffer:
         
         # the next two lines implement GAE-Lambda advantage calculation
         deltas = rews[:-1] + self.gamma * vals[1:] - vals[:-1]
-        self.discounted_adv_buf[path_slice] = core.discount_cumsum(deltas, self.gamma * self.lam)
+        self.adv_buf[path_slice] = core.discount_cumsum(deltas, self.gamma * self.lam)
         
         # the next line computes rewards-to-go, to be targets for the value function
         self.ret_buf[path_slice] = core.discount_cumsum(rews, self.gamma)[:-1]
@@ -89,19 +87,17 @@ class TRPOBuffer:
         mean zero and std one). Also, resets some pointers in the buffer.
         """
         assert self.ptr == self.max_size    # buffer has to be full before you can get
-        self.ptr, self.path_start_idx = 0, 0    # reset the buffer
+        self.ptr, self.path_start_idx = 0, 0
         # the next two lines implement the advantage normalization trick
-        adv_mean, adv_std = mpi_statistics_scalar(self.discounted_adv_buf)
-        self.discounted_adv_buf = (self.discounted_adv_buf - adv_mean) / adv_std
+        adv_mean, adv_std = mpi_statistics_scalar(self.adv_buf)
+        self.adv_buf = (self.adv_buf - adv_mean) / adv_std
         data = dict(obs=torch.FloatTensor(self.obs_buf).to(device), 
                     act=torch.FloatTensor(self.act_buf).to(device), 
                     ret=torch.FloatTensor(self.ret_buf).to(device),
-                    disc_adv=torch.FloatTensor(self.discounted_adv_buf).to(device), 
+                    adv=torch.FloatTensor(self.adv_buf).to(device), 
                     logp=torch.FloatTensor(self.logp_buf).to(device),
                     mu=torch.FloatTensor(self.mu_buf).to(device),
                     logstd=torch.FloatTensor(self.logstd_buf).to(device),
-                    logits=torch.FloatTensor(self.logits_buf).to(device),
-                    val=torch.FloatTensor(self.val_buf).to(device),
         )
         return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in data.items()}
 
@@ -155,12 +151,13 @@ def auto_hession_x(objective, net, x):
     
     return auto_grad(torch.dot(jacob, x), net, to_numpy=True)
 
-def trpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
-        steps_per_epoch=4000, epochs=50, gamma=0.99,
+def trpoissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
+        steps_per_epoch=4000, epochs=50, gamma=0.99, 
         vf_lr=1e-3, train_v_iters=80, lam=0.97, max_ep_len=1000,
-        target_kl=0.01, logger_kwargs=dict(), save_freq=10, backtrack_coeff=0.8, backtrack_iters=100, model_save=False, atari=None):
+        target_kl=0.01, logger_kwargs=dict(), save_freq=10, backtrack_coeff=0.8, backtrack_iters=100, model_save=False,
+        adaptive_k=1, adaptive_n=1, adaptive_sigma=0.04):
     """
-    Trust Region Policy Optimization
+    Implicit Safe Set Algorithm (by using TRPO) 
  
     Args:
         env_fn : A function which creates a copy of the environment.
@@ -214,7 +211,7 @@ def trpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
 
         ac_kwargs (dict): Any kwargs appropriate for the ActorCritic object 
-            you provided to TRPO.
+            you provided to PPO.
 
         seed (int): Seed for random number generators.
 
@@ -251,12 +248,12 @@ def trpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         
         model_save (bool): If saving model.
         
-        atari (str): name of atari game (None if running continuous game).
+        adaptive_k (int): hyperparameter of safety index.
+        
+        adaptive_n (int): hyperparameter of safety index.
+        
+        adaptive_sigma (float): hyperparameter of safety index.
     """
-    
-    def atari_env_fn(atari_name, version='5'):
-        env_name = 'ALE/' + atari_name + '-v' + version
-        return gymnasium.make(env_name, obs_type="ram")
 
     # Special function to avoid certain slowdowns from PyTorch + MPI combo.
     setup_pytorch_for_mpi()
@@ -271,14 +268,10 @@ def trpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     np.random.seed(seed)
 
     # Instantiate environment
-    if atari == None:
-        env = env_fn()
-    else:
-        env = atari_env_fn(atari)
+    env = env_fn()
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape
 
-    # Create actor-critic module
     ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs).to(device)
 
     # Sync params across processes
@@ -290,41 +283,37 @@ def trpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     # Set up experience buffer
     local_steps_per_epoch = int(steps_per_epoch / num_procs())
-    if atari == None:
-        buf = TRPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
-    else:
-        buf = TRPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam, env.action_space.n)
+    buf = ISSABuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
+    local_steps_per_epoch_eval = 10000
 
     def compute_kl_pi(data, cur_pi):
         """
         Return the sample average KL divergence between old and new policies
         """
-        obs = data['obs']
-    
-        if atari == None:
-            mu_old, logstd_old =  data['mu'], data['logstd']
-            average_kl = cur_pi._d_kl(
-                torch.as_tensor(obs, dtype=torch.float32),
-                torch.as_tensor(mu_old, dtype=torch.float32),
-                torch.as_tensor(logstd_old, dtype=torch.float32), device=device)
-        else:
-            logits_old = data['logits']
-            average_kl = cur_pi._d_kl(
-                torch.as_tensor(obs, dtype=torch.float32),
-                torch.as_tensor(logits_old, dtype=torch.float32), device=device)
+        obs, act, adv, logp_old, mu_old, logstd_old = data['obs'], data['act'], data['adv'], data['logp'], data['mu'], data['logstd']
+        
+        # Average KL Divergence  
+        pi, logp = cur_pi(obs, act)
+        # average_kl = (logp_old - logp).mean()
+        average_kl = cur_pi._d_kl(
+            torch.as_tensor(obs, dtype=torch.float32),
+            torch.as_tensor(mu_old, dtype=torch.float32),
+            torch.as_tensor(logstd_old, dtype=torch.float32), device=device)
         
         return average_kl
-    
+
+
     def compute_loss_pi(data, cur_pi):
         """
-        The reward objective TRPO (TRPO policy loss)
+        The reward objective for ISSA (ISSA policy loss)
         """
-        obs, act, disc_adv, logp_old = data['obs'], data['act'], data['disc_adv'], data['logp']
+        obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
         
         # Policy loss 
         pi, logp = cur_pi(obs, act)
+        # loss_pi = -(logp * adv).mean()
         ratio = torch.exp(logp - logp_old)
-        loss_pi = -(ratio*disc_adv).mean()
+        loss_pi = -(ratio * adv).mean()
         
         # Useful extra info
         approx_kl = (logp_old - logp).mean().item()
@@ -332,12 +321,12 @@ def trpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         pi_info = dict(kl=approx_kl, ent=ent)
         
         return loss_pi, pi_info
+        
 
     # Set up function for computing value loss
     def compute_loss_v(data):
         obs, ret = data['obs'], data['ret']
         return ((ac.v(obs) - ret)**2).mean()
-        
 
     # Set up optimizers for policy and value function
     vf_optimizer = Adam(ac.v.parameters(), lr=vf_lr)
@@ -346,6 +335,203 @@ def trpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     if model_save:
         logger.setup_pytorch_saver(ac)
 
+    def chk_unsafe(s, point, dt_ratio, dt_adamba, env, threshold, margin, adaptive_k, adaptive_n, adaptive_sigma, trigger_by_pre_execute, pre_execute_coef):
+        action = point.tolist()
+        # save state of env
+        stored_state = copy.deepcopy(env.sim.get_state())
+        safe_index_now = env.adaptive_safety_index(k=adaptive_k, sigma=adaptive_sigma, n=adaptive_n)
+
+        # simulate the action
+        try:
+            s_new,_,_,info = env.step(action, simulate_in_adamba=True)
+            if 'cost_exception' not in info:    
+                safe_index_future = env.adaptive_safety_index(k=adaptive_k, sigma=adaptive_sigma, n=adaptive_n)
+                if safe_index_future < max(0, safe_index_now):
+                    flag = 0  # safe
+                else:
+                    flag = 1  # unsafe
+            else:
+                flag = -1
+        except: 
+            flag = -1  # expection
+            
+        if flag == -1:
+            while True:
+                try:
+                    o = env.reset()
+                    break
+                except:
+                    print('reset environment is wrong, try next reset')
+        # set qpos and qvel
+        env.sim.set_state(stored_state)
+    
+        # Note that the position-dependent stages of the computation must have been executed for the current state in order for these functions to return correct results. So to be safe, do mj_forward and then mj_jac. If you do mj_step and then call mj_jac, the Jacobians will correspond to the state before the integration of positions and velocities took place.
+        env.sim.forward()
+        return flag, env
+
+    def outofbound(action_limit, action):
+        flag = False
+        for i in range(len(action_limit)):
+            assert action_limit[i][1] > action_limit[i][0]
+            if action[i] < action_limit[i][0] or action[i] > action_limit[i][1]:
+                flag = True
+                break
+        return flag
+
+    # Correction function of ISSA using AdamBA
+    def AdamBA_SC(s, u, env, threshold=0, dt_ratio=1.0, ctrlrange=10.0, margin=0.4, adaptive_k=3, adaptive_n=1, adaptive_sigma=0.04, trigger_by_pre_execute=False, pre_execute_coef=0.0, vec_num=None, max_trial_num =1):
+        infSet = []
+
+        u = np.clip(u, -ctrlrange, ctrlrange)
+
+        #action_space_num = 2
+        action_space_num = env.action_space.shape[0]
+        action = np.array(u).reshape(-1, action_space_num)
+
+        dt_adamba = env.model.opt.timestep * env.frameskip_binom_n * dt_ratio
+
+        assert dt_ratio == 1
+
+        limits= [[-ctrlrange, ctrlrange]] * action_space_num
+        NP = action
+
+        # generate direction
+        NP_vec_dir = []
+        NP_vec = []
+
+        loc = 0 
+        scale = 0.1
+        
+        # num of actions input, default as 1
+        for t in range(0, NP.shape[0]):
+            if action_space_num == 2:
+                vec_set = []
+                vec_dir_set = []
+                for m in range(0, vec_num):
+                    theta_m = m * (2 * np.pi / vec_num)
+                    vec_dir = np.array([np.sin(theta_m), np.cos(theta_m)]) / 2
+                    vec_dir_set.append(vec_dir)
+                    vec = NP[t]
+                    vec_set.append(vec)
+                NP_vec_dir.append(vec_dir_set)
+                NP_vec.append(vec_set)
+            else:
+                vec_dir_set = np.random.normal(loc=loc, scale=scale, size=[vec_num, action_space_num])
+                vec_set = [NP[t]] * vec_num
+                NP_vec_dir.append(vec_dir_set)
+                NP_vec.append(vec_set)
+
+        bound = 0.0001
+
+        # record how many boundary points have been found
+        valid = 0
+        cnt = 0
+        out = 0
+        yes = 0
+        
+        max_trials = max_trial_num
+        for n in range(0, NP.shape[0]):
+            trial_num = 0
+            at_least_1 = False
+            while trial_num < max_trials and not at_least_1:
+                at_least_1 = False
+                trial_num += 1
+                NP_vec_tmp = copy.deepcopy(NP_vec[n])
+
+                if trial_num ==1:
+                    NP_vec_dir_tmp = NP_vec_dir[n]
+                else:
+                    NP_vec_dir_tmp = np.random.normal(loc=loc, scale=scale, size=[vec_num, action_space_num])
+
+                for v in range(0, vec_num):
+                    NP_vec_tmp_i = NP_vec_tmp[v]
+
+                    NP_vec_dir_tmp_i = NP_vec_dir_tmp[v]
+
+                    eta = bound
+                    decrease_flag = 0
+                    
+                    opt_solution = []
+                    while True: 
+                        
+                        flag, env = chk_unsafe(s, NP_vec_tmp_i, dt_ratio=dt_ratio, dt_adamba=dt_adamba, env=env,
+                                            threshold=threshold, margin=margin, adaptive_k=adaptive_k, adaptive_n=adaptive_n, adaptive_sigma=adaptive_sigma,
+                                            trigger_by_pre_execute=trigger_by_pre_execute, pre_execute_coef=pre_execute_coef)
+
+                        # safety gym env itself has clip operation inside
+                        if outofbound(limits, NP_vec_tmp_i):
+                            break
+
+                        if flag == -1:
+                            # simulation expection
+                            break
+                        
+                        if eta <= bound and decrease_flag == 1:
+                            NP_vec_tmp_i = opt_solution
+                            at_least_1 = True
+                            break
+
+                        # AdamBA procudure
+                        if flag == 1 and decrease_flag == 0:
+                            # outreach
+                            NP_vec_tmp_i = NP_vec_tmp_i + eta * NP_vec_dir_tmp_i
+                            eta = eta * 2
+                            continue
+                        
+                        # monitor for 1st reaching out boundary
+                        if flag == 0 and decrease_flag == 0:
+                            decrease_flag = 1
+                            opt_solution = NP_vec_tmp_i
+                            eta = eta * 0.25  # make sure decrease step start at 0.5 of last increasing step
+                            continue
+                        # decrease eta
+                        if flag == 1 and decrease_flag == 1:
+                            NP_vec_tmp_i = NP_vec_tmp_i + eta * NP_vec_dir_tmp_i
+                            eta = eta * 0.5
+                            continue
+                        if flag == 0 and decrease_flag == 1:
+                            opt_solution = NP_vec_tmp_i
+                            NP_vec_tmp_i = NP_vec_tmp_i - eta * NP_vec_dir_tmp_i
+                            eta = eta * 0.5
+                            continue
+
+                    NP_vec_tmp[v] = NP_vec_tmp_i
+
+            NP_vec_tmp_new = []
+            for vnum in range(0, len(NP_vec_tmp)):
+                cnt += 1
+                if outofbound(limits, NP_vec_tmp[vnum]):
+                    out += 1
+                    continue
+                if NP_vec_tmp[vnum][0] == u[0] and NP_vec_tmp[vnum][1] == u[1]:
+                    yes += 1
+                    continue
+
+                valid += 1
+                NP_vec_tmp_new.append(NP_vec_tmp[vnum])
+            NP_vec[n] = NP_vec_tmp_new
+
+        NP_vec_tmp = NP_vec[0]
+
+        if valid > 0:
+            valid_adamba_sc = "adamba_sc success"
+        elif valid == 0 and yes==vec_num:
+            valid_adamba_sc = "itself satisfy"
+        elif valid == 0 and out==vec_num:
+            valid_adamba_sc = "all out"
+        else:
+            valid_adamba_sc = "exception"
+            print("out = ", out)
+            print("yes = ", yes)
+            print("valid = ", valid)
+
+        if len(NP_vec_tmp) > 0:  # at least we have one sampled action satisfying the safety index 
+            norm_list = np.linalg.norm(NP_vec_tmp, axis=1)
+            optimal_action_index = np.where(norm_list == np.amin(norm_list))[0][0]
+            return NP_vec_tmp[optimal_action_index], valid_adamba_sc, env, NP_vec_tmp
+        else:
+            return None, valid_adamba_sc, env, None
+    
     def update():
         data = buf.get()
 
@@ -353,7 +539,8 @@ def trpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         pi_l_old = pi_l_old.item()
         v_l_old = compute_loss_v(data).item()
 
-        # TRPO policy update core impelmentation 
+
+        # ISSA policy update core impelmentation 
         loss_pi, pi_info = compute_loss_pi(data, ac.pi)
         g = auto_grad(loss_pi, ac.pi) # get the flatten gradient evaluted at pi old 
         kl_div = compute_kl_pi(data, ac.pi)
@@ -380,7 +567,8 @@ def trpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             try:
                 kl, pi_l_new = set_and_eval(backtrack_coeff**j)
             except:
-                import ipdb; ipdb.set_trace()
+                # import ipdb; ipdb.set_trace()
+                break
             
             if (kl.item() <= target_kl and pi_l_new.item() <= pi_l_old):
                 print(colorize(f'Accepting new params at step %d of line search.'%j, 'green', bold=False))
@@ -408,57 +596,57 @@ def trpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                      DeltaLossV=(loss_v.item() - v_l_old),
                      EpochS = s_ep)
 
-
     # Prepare for interaction with environment
     start_time = time.time()
-    # o, ep_ret, ep_len = env.reset(), 0, 0
     while True:
         try:
-            if atari == None:
-                o, ep_ret, ep_len = env.reset(), 0, 0
-            else:
-                o, ep_ret, ep_len = env.reset(seed=seed), 0, 0
+            o, ep_ret, ep_len = env.reset(), 0, 0
             break
         except:
             print('reset environment is wrong, try next reset')
+    ep_cost, cum_cost, ep_cost_issa = 0, 0, 0
+    cum_cost_eval = 0
+    cum_cost_issa = 0
+    AdamBA_cnt = 0
+    ISSA_cnt = 0
+    
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
+        EP_start_time=time.time()
         for t in range(local_steps_per_epoch):
-            if isinstance(o, tuple):
-                o = o[0]
-            if atari == None:
-                a, v, logp, mu, logstd = ac.step(torch.as_tensor(o, dtype=torch.float32))
-            else:
-                a, v, logp, logits = ac.step(torch.as_tensor(o, dtype=torch.float32))
-            
-            try:
-                if atari == None:
-                    next_o, r, d, info = env.step(a)
-                else:
-                    next_o, r, d_1, d_2, info = env.step(a)
-                    d = d_1 or d_2
+            if t % 1000 == 0:
+                AdamBA_cnt = 0
+            a, v, logp, mu, logstd = ac.step(torch.as_tensor(o, dtype=torch.float32))
+                    
+            a_safe, valid_adamba_sc, _, _ = AdamBA_SC(o, a, env, vec_num=5, trigger_by_pre_execute=True, adaptive_k=adaptive_k, adaptive_n=adaptive_n, adaptive_sigma=adaptive_sigma)
+            if a_safe is None:
+                a_safe = a
+            if a_safe is not a:
+                AdamBA_cnt += 1
+                ISSA_cnt += 1
+                    
+            try: 
+                next_o, r, d, info = env.step(a_safe)
+                assert 'cost' in info.keys()
             except: 
-                print(f"simulation exception discovered, discard this episode")
                 # simulation exception discovered, discard this episode 
                 next_o, r, d = o, 0, True # observation will not change, no reward when episode done 
+                info['cost'] = 0 # no cost when episode done 
+            
+            # Track cumulative cost over training
+            cum_cost += info['cost']
             
             ep_ret += r
             ep_len += 1
+            ep_cost += info['cost']
 
             # save and log
-            if isinstance(o, tuple):
-                o = o[0]
-            if atari == None:
-                buf.store(o, a, r, v, logp, mu=mu, logstd=logstd)
-            else:
-                buf.store(o, a, r, v, logp, logits=logits)
-            logger.store(VVals=v)
+            buf.store(o, a, r, v, logp, mu, logstd)
             
             # Update obs (critical!)
             o = next_o
 
-            atari_mode = atari != None
-            timeout = (ep_len == max_ep_len) and (not atari_mode)
+            timeout = ep_len == max_ep_len
             terminal = d or timeout
             epoch_ended = t==local_steps_per_epoch-1
 
@@ -467,40 +655,120 @@ def trpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                     print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
                 # if trajectory didn't reach terminal state, bootstrap value target
                 if timeout or epoch_ended:
-                    if isinstance(o, tuple):
-                        o = o[0]
-                    if atari == None:
-                        _, v, _, _, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
-                    else:
-                        _, v, _, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
+                    _, v, _, _, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
                 else:
                     v = 0
                 buf.finish_path(v)
                 if terminal:
-                    # only save EpRet / EpLen if trajectory finished
-                    logger.store(EpRet=ep_ret, EpLen=ep_len)
+                    # only save EpRet / EpLen / EpCost if trajectory finished
+                    logger.store(EpRet_train=ep_ret, EpLen_train=ep_len, EpCost_train=ep_cost, EpCost_ISSA=ep_cost_issa, EpISSA_train=ISSA_cnt,EPTime_train=time.time()-EP_start_time)
                 while True:
                     try:
-                        if atari == None:
-                            o, ep_ret, ep_len = env.reset(), 0, 0
-                        else:
-                            o, ep_ret, ep_len = env.reset(seed=seed), 0, 0
+                        o, ep_ret, ep_len = env.reset(), 0, 0
                         break
                     except:
                         print('reset environment is wrong, try next reset')
+                ep_cost = 0 # episode cost is zero 
+                ep_cost_issa = 0
+                ISSA_cnt = 0
+                EP_start_time = time.time()
 
+        ###########################################################################################       
+        # evaluate without ISSA  
+        while True:
+            try:
+                o, ep_ret_eval, ep_len_eval = env.reset(), 0, 0
+                break
+            except:
+                print('reset environment is wrong, try next reset')
+        ep_cost_eval = 0
+        
+        EP_start_time_eval=time.time()
+        for t in range(local_steps_per_epoch_eval):
+            a, v, logp, mu, logstd = ac.step(torch.as_tensor(o, dtype=torch.float32))
+            a_safe = a 
+                    
+            try: 
+                next_o, r, d, info = env.step(a_safe)
+                assert 'cost' in info.keys()
+            except: 
+                # simulation exception discovered, discard this episode 
+                next_o, r, d = o, 0, True # observation will not change, no reward when episode done 
+                info['cost'] = 0 # no cost when episode done 
+            
+            # Track cumulative cost over training
+            cum_cost_eval += info['cost']
+            
+            ep_ret_eval += r
+            ep_len_eval += 1
+            ep_cost_eval += info['cost']
+
+            logger.store(VVals=v)
+            
+            # Update obs (critical!)
+            o = next_o
+
+            timeout = ep_len_eval == max_ep_len
+            terminal = d or timeout
+            epoch_ended = t==local_steps_per_epoch_eval-1
+
+            if terminal or epoch_ended:
+                if epoch_ended and not(terminal):
+                    print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
+                # if trajectory didn't reach terminal state, bootstrap value target
+                if timeout or epoch_ended:
+                    _, v, _, _, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
+                else:
+                    v = 0
+                # buf.finish_path(v)
+                if terminal:
+                    # only save EpRet / EpLen / EpCost if trajectory finished
+                    logger.store(EpRet=ep_ret_eval, EpLen=ep_len_eval, EpCost=ep_cost_eval,EPTime=time.time()-EP_start_time_eval)
+                while True:
+                    try:
+                        o, ep_ret_eval, ep_len_eval = env.reset(), 0, 0
+                        break
+                    except:
+                        print('reset environment is wrong, try next reset')
+                ep_cost_eval = 0 # episode cost is zero 
+                EP_start_time_eval = time.time()
+        
+        
         # Save model
         if ((epoch % save_freq == 0) or (epoch == epochs-1)) and model_save:
             logger.save_state({'env': env}, None)
 
-        # Perform TRPO update!
+        # Perform ISSA update!
         update()
+        
+        #=====================================================================#
+        #  Cumulative cost calculations                                       #
+        #=====================================================================#
+        cumulative_cost = mpi_sum(cum_cost)
+        cost_rate = cumulative_cost / ((epoch+1)*steps_per_epoch)
+
+        cumulative_cost_eval = mpi_sum(cum_cost_eval)
+        cost_rate_eval = cumulative_cost_eval / ((epoch+1)*local_steps_per_epoch_eval)
 
         # Log info about epoch
         logger.log_tabular('Epoch', epoch)
-        logger.log_tabular('EpRet', with_min_and_max=True)
+        logger.log_tabular('EpRet', average_only=True)
+        logger.log_tabular('EpCost', average_only=True)
         logger.log_tabular('EpLen', average_only=True)
-        logger.log_tabular('VVals', with_min_and_max=True)
+        logger.log_tabular('CumulativeCost', cumulative_cost_eval)
+        logger.log_tabular('CostRate', cost_rate_eval)
+        
+        logger.log_tabular('EpRet_train', average_only=True)
+        logger.log_tabular('EpCost_train', average_only=True)
+        logger.log_tabular('EpCost_ISSA', average_only=True)
+        logger.log_tabular('EpLen_train', average_only=True)
+        logger.log_tabular('EpISSA_train', average_only=True)
+        logger.log_tabular('EPTime_train', average_only=True)
+        logger.log_tabular('EPTime', average_only=True)
+        logger.log_tabular('CumulativeCost_train', cumulative_cost)
+        logger.log_tabular('CostRate_train', cost_rate)
+        
+        logger.log_tabular('VVals', average_only=True)
         logger.log_tabular('TotalEnvInteracts', (epoch+1)*steps_per_epoch)
         logger.log_tabular('LossPi', average_only=True)
         logger.log_tabular('LossV', average_only=True)
@@ -510,7 +778,7 @@ def trpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         logger.log_tabular('KL', average_only=True)
         logger.log_tabular('Time', time.time()-start_time)
         logger.log_tabular('EpochS', average_only=True)
-        logger.dump_tabular()       
+        logger.dump_tabular()
         
         
 def create_env(args):
@@ -520,7 +788,7 @@ def create_env(args):
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()    
-    parser.add_argument('--task', type=str, default='Goal_Point')
+    parser.add_argument('--task', type=str, default='Goal_Point_8Hazards')
     parser.add_argument('--hid', type=int, default=64)
     parser.add_argument('--l', type=int, default=2)
     parser.add_argument('--gamma', type=float, default=0.99)
@@ -528,40 +796,25 @@ if __name__ == '__main__':
     parser.add_argument('--cpu', type=int, default=1)
     parser.add_argument('--steps', type=int, default=30000)
     parser.add_argument('--max_ep_len', type=int, default=1000)
-    parser.add_argument('--epochs', type=int, default=200)          
-    parser.add_argument('--exp_name', type=str, default='trpo')
+    parser.add_argument('--epochs', type=int, default=200)
+    parser.add_argument('--exp_name', type=str, default='trpoissa')
     parser.add_argument('--model_save', action='store_true')
-    parser.add_argument('--target_kl', type=float, default=0.02)      
-    parser.add_argument('--atari_name', '-a', type=str, default=None, 
-                        choices=['Adventure', 'Pong', 'Seaquest', 'Riverraid', 'Freeway', 'BeamRider', 'Gopher', 'SpaceInvaders',
-                                 'AirRaid', 'Assault', 'Qbert', 'Skiing', 'Enduro', 'Breakout', 'Bowling', 'IceHockey', 'KungFuMaster',
-                                 'TimePilot', 'Boxing', 'JourneyEscape', 'CrazyClimber', 'Frostbite',
-                                 'Asteroids', 'Solaris', 'Zaxxon', 'BattleZone', 'Centipede', 'DemonAttack',
-                                 'StarGunner', 'VideoPinball', 'Venture', 'UpNDown', 'Robotank',
-                                 'Atlantis', 'Carnival', 'Defender', 'ElevatorAction', 'Hero',
-                                 'Pitfall', 'Amidar', 'FishingDerby', 'MsPacman',
-                                 'Alien', 'Asterix', 'BankHeist', 'Berzerk', 'ChopperCommand',
-                                 'DoubleDunk', 'Gravitar', 'Jamesbond', 'Kangaroo', 'NameThisGame',
-                                 'Krull', 'MontezumaRevenge', 'Phoenix', 'Pooyan', 'PrivateEye', 'RoadRunner',
-                                 'Tennis', 'Tutankham', 'WizardOfWor', 'YarsRevenge'])
+    parser.add_argument('--target_kl', type=float, default=0.02)
+    parser.add_argument('--adaptive_k', type=float, default=1)
+    parser.add_argument('--adaptive_n', type=float, default=1)
+    parser.add_argument('--adaptive_sigma', type=float, default=0.04)
     args = parser.parse_args()
 
     mpi_fork(args.cpu)  # run parallel code with mpi
     
-    if args.atari_name == None:
-        exp_name = args.task + '_' + args.exp_name + '_' + 'kl' + str(args.target_kl) + '_' + 'epochs' + str(args.epochs)
-    else:
-        import gymnasium
-        exp_name = args.atari_name + '_' + args.exp_name + '_' + 'kl' + str(args.target_kl) + '_' + 'epochs' + str(args.epochs)
-    logger_kwargs = setup_logger_kwargs(exp_name, args.seed)
+    # exp_name = args.task + '_' + args.exp_name + '_' + 'kl' + str(args.target_kl) + '_' + 'epochs' + str(args.epochs)
+    logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed)
 
     # whether to save model
     model_save = True if args.model_save else False
 
-    trpo(lambda : create_env(args), actor_critic=core.MLPActorCritic,
+    trpoissa(lambda : create_env(args), actor_critic=core.MLPActorCritic,
         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma, 
         seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
         logger_kwargs=logger_kwargs, model_save=model_save, target_kl=args.target_kl, max_ep_len=args.max_ep_len,
-        atari=args.atari_name)
-    
-
+        adaptive_k = args.adaptive_k, adaptive_n = args.adaptive_n, adaptive_sigma = args.adaptive_sigma)

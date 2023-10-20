@@ -1,7 +1,6 @@
 import numpy as np
 import scipy.signal
-from gym.spaces import Box
-from gymnasium.spaces import Discrete
+from gym.spaces import Box, Discrete
 
 import torch
 import torch.nn as nn
@@ -9,7 +8,7 @@ from torch.distributions.normal import Normal
 from torch.distributions.categorical import Categorical
 
 EPS = 1e-8
-
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 def diagonal_gaussian_kl(mu0, log_std0, mu1, log_std1):
     """
     torch symbol for mean KL divergence between two batches of diagonal gaussian distributions,
@@ -89,17 +88,12 @@ class MLPCategoricalActor(Actor):
     def _distribution(self, obs):
         logits = self.logits_net(obs)
         return Categorical(logits=logits)
-        
+
     def _log_prob_from_distribution(self, pi, act):
         return pi.log_prob(act)
     
-    def _d_kl(self, obs, old_logits, device):
-        logits = self.logits_net(obs)
-        tmp_cat = Categorical(logits=logits)
-        all_kls = (torch.exp(old_logits) * (old_logits - tmp_cat.logits)).sum(axis=1)
-        return all_kls.mean()
-        
-        
+    def _d_kl(self, obs, old_mu, old_log_std, device):
+        raise NotImplementedError
 
 class MLPGaussianActor(Actor):
 
@@ -111,6 +105,7 @@ class MLPGaussianActor(Actor):
 
     def _distribution(self, obs):
         mu = self.mu_net(obs)
+        # std = 0.01 + 0.99 * torch.exp(self.log_std)
         std = torch.exp(self.log_std)
         return Normal(mu, std)
 
@@ -126,7 +121,6 @@ class MLPGaussianActor(Actor):
         return d_kl
 
 
-
 class MLPCritic(nn.Module):
 
     def __init__(self, obs_dim, hidden_sizes, activation):
@@ -137,36 +131,34 @@ class MLPCritic(nn.Module):
         return torch.squeeze(self.v_net(obs), -1) # Critical to ensure v has right shape.
 
 
+
 class MLPActorCritic(nn.Module):
 
 
     def __init__(self, observation_space, action_space, 
                  hidden_sizes=(64,64), activation=nn.Tanh):
         super().__init__()
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        
 
         obs_dim = observation_space.shape[0]
 
         # policy builder depends on action space
         if isinstance(action_space, Box):
-            self.pi = MLPGaussianActor(obs_dim, action_space.shape[0], hidden_sizes, activation).to(self.device)
+            self.pi = MLPGaussianActor(obs_dim, action_space.shape[0], hidden_sizes, activation).to(device)
         elif isinstance(action_space, Discrete):
-            self.pi = MLPCategoricalActor(obs_dim, action_space.n, hidden_sizes, activation).to(self.device)
+            self.pi = MLPCategoricalActor(obs_dim, action_space.n, hidden_sizes, activation).to(device)
 
         # build value function
-        self.v = MLPCritic(obs_dim, hidden_sizes, activation).to(self.device)
+        self.v  = MLPCritic(obs_dim, hidden_sizes, activation).to(device)
 
     def step(self, obs):
         with torch.no_grad():
-            obs = obs.to(self.device)
+            obs = obs.to(device)
             pi = self.pi._distribution(obs)
             a = pi.sample()
             logp_a = self.pi._log_prob_from_distribution(pi, a)
             v = self.v(obs)
-        if isinstance(pi, Normal):
-            return a.cpu().numpy(), v.cpu().numpy(), logp_a.cpu().numpy(), pi.mean.cpu().numpy(), torch.log(pi.stddev).cpu().numpy()
-        elif isinstance(pi, Categorical):
-            return a.cpu().numpy(), v.cpu().numpy(), logp_a.cpu().numpy(), pi.logits.cpu().numpy()
+        return a.cpu().numpy(), v.cpu().numpy(), logp_a.cpu().numpy(), pi.mean.cpu().numpy(), torch.log(pi.stddev).cpu().numpy()
 
     def act(self, obs):
         return self.step(obs)[0]
