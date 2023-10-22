@@ -6,12 +6,15 @@ GUARD is a highly customizable generalized benchmark with a wide variety of RL a
 GUARD comprehensively covers state-of-the-art safe RL algorithms with self-contained implementations.
 
 GUARD is composed of two main components: GUARD Safe RL library and GUARD testing suite.
-Our implementation is partially inspired by [safety-gym](https://github.com/openai/safety-gym) and [spinningup](https://github.com/openai/spinningup).
 
 Supported algorithms in the GUARD Safe RL library include:
 
 **Unconstrained**
 - [Trust Region Policy Optimization (TRPO)](https://arxiv.org/abs/1502.05477)
+- [Absolute Policy Optimization (APO)](todo) (not in paper)
+- [Proximal Policy Optimization (PPO)](https://arxiv.org/abs/2308.05585) (not in paper)
+- [Asynchronous Actor-critic (A2C)](https://arxiv.org/abs/1602.01783?context=cs.LG) (not in paper)
+
 
 **End-to-end**
 - [Constrained Policy Optimization (CPO)](https://arxiv.org/abs/1705.10528)
@@ -20,13 +23,13 @@ Supported algorithms in the GUARD Safe RL library include:
 - [TRPO-Interior-point Policy Optimization (IPO)](https://arxiv.org/abs/1910.09615)
 - [Projection-based Constrained Policy Optimization (PCPO)](https://arxiv.org/abs/2010.03152)
 - [Primal-Dual Optimization (PDO)](https://arxiv.org/abs/1512.01629) (not in paper)
-- [State-wise Constrained Policy Optimization (SCPO)] (not in paper)
-  - To download SCPO code, run `git submodule update --init --recursive` after cloning this repo.
 
 **Hierarchical**
 - [TRPO-Safety Layer (SL)](https://arxiv.org/abs/1801.08757)
 - [TRPO-Unrolling Safety Layer (USL)](https://arxiv.org/abs/2206.08528)
 - [Lyapunov-based Safe Policy Optimization (LPG)](https://arxiv.org/abs/1901.10031) (not in paper)
+- [Implicit Safe Set Algorithm (ISSA)](https://openreview.net/forum?id=UGp6FDaxB0f) (not in paper)
+- [Uncertainty-Aware Implicit Safe Set Algorithm (ISSA)](https://arxiv.org/abs/2210.01041) (not in paper)
 
 GUARD testing suite supports the following agents:
 - Swimmer
@@ -40,16 +43,9 @@ GUARD testing suite supports the following agents:
 
 GUARD testing suite supports the following tasks:
 - Goal
-<img src="https://github.com/intelligent-control-lab/guard/assets/91172531/97270fed-af6d-44e0-b246-71845aba1932" width="400"/>
-
 - Push
-<img src="https://github.com/intelligent-control-lab/guard/assets/91172531/c3b304cc-c32f-4ea5-9328-2c6e48f26a11" width="400"/>
-
 - Chase
-<img src="https://github.com/intelligent-control-lab/guard/assets/91172531/b54a50d2-fd67-4532-8560-c803de4bf269" width="400"/>
-
 - Defense
-<img src="https://github.com/intelligent-control-lab/guard/assets/91172531/03b48a0c-1d5e-4fa8-a6d7-782a475ad5e8" width="400"/>
 
 GUARD testing suite supports the following safety constraints (obstacles):
 - 3D Hazards
@@ -65,29 +61,20 @@ For full options, please see the paper.
 
 ---
 ## Installation
-Install environment:
-```
-conda create --name venv --file requirements.txt
-```
 
-- ![#c5f015](https://placehold.co/15x15/c5f015/c5f015.png) Note that if error reports while installing conda environment. You may choose to first comment the unsupported package, then use `pip install` to install those packages manually. 
+Install [mujoco_py](https://github.com/openai/mujoco-py), see the mujoco_py documentation for details. Note that mujoco_py **requires Python 3.6 or greater**.
 
-
-Afterwards, Install [mujoco_py](https://github.com/openai/mujoco-py), see the mujoco_py documentation for details. Note that mujoco_py **requires Python 3.6 or greater**.
-
-- ![#c5f015](https://placehold.co/15x15/c5f015/c5f015.png) Due to the recent update of Cython, please update cython version after installation of mujoco-py, or error will be reported when importing mujoco.
-```
-pip install "cython<3"
-```
-
-Lastly, install `safe_rl_envs` by:
+Afterwards, simply install `safe_rl_envs` by:
 
 ```
 cd safe_rl_envs
 pip install -e .
 ```
 
-
+Install environment:
+```
+conda create --name venv --file requirements.txt
+```
 ---
 ## Quick Start
 ### 1. Environment Configuration
