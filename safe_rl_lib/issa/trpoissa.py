@@ -3,12 +3,10 @@ os.sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '..
 import numpy as np
 import torch
 from torch.optim import Adam
-from torch.utils.data import TensorDataset, DataLoader
-import torch.nn as nn
 import gym
 import time
 import copy
-import uaissa_core as core
+import trpoissa_core as core
 from utils.logx import EpochLogger, setup_logger_kwargs, colorize
 from utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs, mpi_sum
@@ -19,46 +17,9 @@ import os.path as osp
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 EPS = 1e-8
 
-class DynamicsDataset:
+class ISSABuffer:
     """
-    A dataset for storing trajectories experienced by a TRPO agent interacting
-    with the environment and will be used for training the dynamics model.
-    """
-    def __init__(self, obs_dim, act_dim, size):
-        size = int(size)
-        self.obs_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
-        self.act_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
-        self.d_buf = np.zeros(size, dtype=np.float32)
-        self.ddot_buf = np.zeros(size, dtype=np.float32)
-        self.ptr, self.max_size = 0, size
-    
-    def store(self, obs, act, d, ddot):
-        """
-        Append one timestep of agent-environment interaction to the dataset.
-        """
-        assert self.ptr < self.max_size 
-        self.obs_buf[self.ptr] = obs
-        self.act_buf[self.ptr] = act
-        self.d_buf[self.ptr] = d
-        self.ddot_buf[self.ptr] = ddot
-        self.ptr += 1
-
-    def get(self):
-        """
-        Call this at the end of warmup to get all of the data from the dataset.
-        """
-        assert self.ptr == self.max_size
-        data = dict(obs=torch.FloatTensor(self.obs_buf).to(device), 
-                    act=torch.FloatTensor(self.act_buf).to(device),
-                    d=torch.FloatTensor(self.d_buf).to(device),
-                    ddot=torch.FloatTensor(self.ddot_buf).to(device)
-        )
-        return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in data.items()}
-
-
-class UAISSABuffer:
-    """
-    A buffer for storing trajectories experienced by a UAISSA agent interacting
+    A buffer for storing trajectories experienced by a ISSA agent interacting
     with the environment, and using Generalized Advantage Estimation (GAE-Lambda)
     for calculating the advantages of state-action pairs.
     """
@@ -190,71 +151,14 @@ def auto_hession_x(objective, net, x):
     
     return auto_grad(torch.dot(jacob, x), net, to_numpy=True)
 
-def build_dynamics(dataset):
-    """
-    Build dynamics model for predict d and ddot
-    """
-    batch_size = 64
-    epochs = 10
-    lr = 1e-3
-    hidden_dim = 128
-    dropout_prob = 0.1
-    model_lam = 1e-2
-
-    data = dataset.get()
-    obs, act, d, ddot = data['obs'], data['act'], data['d'], data['ddot']
-
-    inputs = torch.cat((obs, act), axis=1)
-    gts = torch.cat((d.view(-1,1), ddot.view(-1,1)), axis=1)
-    split_num = int(inputs.shape[0]*0.7)
-    train_dataset = TensorDataset(inputs[0:split_num, :], gts[0:split_num, :])
-    test_dataset = TensorDataset(inputs[split_num:, :], gts[split_num:, :])
-    print(f"Train data num: {len(train_dataset)}, Test data num: {len(test_dataset)}")
-
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-    
-    model = core.DynamicsModel(input_dim=obs.shape[1]+act.shape[1], hidden_dim=hidden_dim, 
-                               output_dim=2, dropout_prob=dropout_prob, model_lam=model_lam).to(device)
-    optimizer = Adam(model.parameters(), lr=lr)
-
-    model.train()
-    for epoch in range(epochs):
-        total_loss = 0.0
-        for batch in train_dataloader:
-            input_data, gt = batch
-            optimizer.zero_grad()
-            pred_output = model(input_data)
-            model_sse = torch.sum((pred_output - gt)**2)
-            loss = (model_sse + model.regurization) / gt.shape[0]
-            total_loss += model_sse.item()
-            loss.backward()
-            optimizer.step()
-        print('Epoch: {}/{}, Loss: {}'.format(epoch, epochs, total_loss/len(train_dataset)))
-    
-    model.eval()
-    total_loss = 0.0
-    with torch.no_grad():
-        for batch in test_dataloader:
-            input_data, gt = batch
-            pred_output = model(input_data)
-            model_sse = torch.sum((pred_output - gt)**2)
-            loss = (model_sse + model.regurization) / gt.shape[0]
-            total_loss += model_sse.item()
-    print('Test Loss: {}'.format(total_loss/len(test_dataset)))
-
-    return model
-
-
-
-def uaissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
+def trpoissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=50, gamma=0.99, 
         vf_lr=1e-3, train_v_iters=80, lam=0.97, max_ep_len=1000,
         target_kl=0.01, logger_kwargs=dict(), save_freq=10, backtrack_coeff=0.8, backtrack_iters=100, model_save=False,
-        adaptive_k=1, adaptive_n=1, adaptive_sigma=0.04, warmup_ratio=0.3, L_beta=0.01):
+        adaptive_k=1, adaptive_n=1, adaptive_sigma=0.04):
     """
     Implicit Safe Set Algorithm (by using TRPO) 
-
+ 
     Args:
         env_fn : A function which creates a copy of the environment.
             The environment must satisfy the OpenAI Gym API.
@@ -349,10 +253,6 @@ def uaissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         adaptive_n (int): hyperparameter of safety index.
         
         adaptive_sigma (float): hyperparameter of safety index.
-
-        warmup_ratio (float): ratio of warmup steps to total steps.
-
-        L_beta (float): hyperparameter of safety index upper bound.
     """
 
     # Special function to avoid certain slowdowns from PyTorch + MPI combo.
@@ -383,11 +283,8 @@ def uaissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     # Set up experience buffer
     local_steps_per_epoch = int(steps_per_epoch / num_procs())
-    buf = UAISSABuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
+    buf = ISSABuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
     local_steps_per_epoch_eval = 10000
-
-    # Set up dynamics dataset
-    dynamics_dataset = DynamicsDataset(obs_dim, act_dim, steps_per_epoch*epochs*warmup_ratio)
 
     def compute_kl_pi(data, cur_pi):
         """
@@ -408,7 +305,7 @@ def uaissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     def compute_loss_pi(data, cur_pi):
         """
-        The reward objective for UAISSA (UAISSA policy loss)
+        The reward objective for ISSA (ISSA policy loss)
         """
         obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
         
@@ -438,51 +335,38 @@ def uaissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     if model_save:
         logger.setup_pytorch_saver(ac)
 
-    def chk_unsafe(s, point, dt_ratio, dt_adamba, env, threshold, margin, adaptive_k, adaptive_n, adaptive_sigma, trigger_by_pre_execute, pre_execute_coef, dynamics):
+    def chk_unsafe(s, point, dt_ratio, dt_adamba, env, threshold, margin, adaptive_k, adaptive_n, adaptive_sigma, trigger_by_pre_execute, pre_execute_coef):
+        action = point.tolist()
+        # save state of env
+        stored_state = copy.deepcopy(env.sim.get_state())
+        safe_index_now = env.adaptive_safety_index(k=adaptive_k, sigma=adaptive_sigma, n=adaptive_n)
 
-        def get_safety_index(d, ddot):
-            safe_index_future = 0.0
-            if env.constrain_hazards:
-                safe_index_future = adaptive_sigma + env.hazards_size**adaptive_n - d**adaptive_n - adaptive_k*ddot
-            elif env.constrain_pillars:
-                safe_index_future = adaptive_sigma + (env.pillars_size+0.1)**adaptive_n - d**adaptive_n - adaptive_k*ddot
+        # simulate the action
+        try:
+            s_new,_,_,info = env.step(action, simulate_in_adamba=True)
+            if 'cost_exception' not in info:    
+                safe_index_future = env.adaptive_safety_index(k=adaptive_k, sigma=adaptive_sigma, n=adaptive_n)
+                if safe_index_future < max(0, safe_index_now):
+                    flag = 0  # safe
+                else:
+                    flag = 1  # unsafe
             else:
-                raise NotImplementedError 
-            return safe_index_future
-
-        def apply_dropout(m):
-            if type(m) == nn.Dropout:
-                m.train()
-
-        dynamics.eval()
-        dynamics.apply(apply_dropout)
-
-        state = torch.FloatTensor(s).to(device)
-        action = torch.FloatTensor(point).to(device)
-        safe_indexes = []
-        flag = 2
-        for _ in range(5):
-            output = dynamics(torch.cat((state, action)).view(1,-1)).squeeze()
-            d, ddot = output[0], output[1]
-            if torch.isnan(d).any() or torch.isnan(ddot).any() or torch.isinf(d).any() or torch.isinf(ddot).any():
                 flag = -1
-                print("dynamics model error")
-                break
-            safe_indexes.append(get_safety_index(d, ddot).item())
-
-        if flag != -1:
-            safe_index_now = env.adaptive_safety_index(k=adaptive_k, sigma=adaptive_sigma, n=adaptive_n)
-
-            expectation = np.mean(safe_indexes)
-            std = np.std(safe_indexes)
-            print(expectation, std)
-            safe_index_future_upperbound = expectation + L_beta * std
-
-            if safe_index_future_upperbound < max(0, safe_index_now):
-                flag = 0  # safe
-            else:
-                flag = 1  # unsafe
-
+        except: 
+            flag = -1  # expection
+            
+        if flag == -1:
+            while True:
+                try:
+                    o = env.reset()
+                    break
+                except:
+                    print('reset environment is wrong, try next reset')
+        # set qpos and qvel
+        env.sim.set_state(stored_state)
+    
+        # Note that the position-dependent stages of the computation must have been executed for the current state in order for these functions to return correct results. So to be safe, do mj_forward and then mj_jac. If you do mj_step and then call mj_jac, the Jacobians will correspond to the state before the integration of positions and velocities took place.
+        env.sim.forward()
         return flag, env
 
     def outofbound(action_limit, action):
@@ -494,15 +378,13 @@ def uaissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 break
         return flag
 
-    # Correction function of UAISSA using AdamBA
-    def AdamBA_SC(s, u, env, threshold=0, dt_ratio=1.0, ctrlrange=10.0, margin=0.4, adaptive_k=3, adaptive_n=1, 
-                  adaptive_sigma=0.04, trigger_by_pre_execute=False, pre_execute_coef=0.0, vec_num=None, max_trial_num=1,
-                  dynamics=None):
-        
-        assert dynamics!=None, "dynamics model not found."
+    # Correction function of ISSA using AdamBA
+    def AdamBA_SC(s, u, env, threshold=0, dt_ratio=1.0, ctrlrange=10.0, margin=0.4, adaptive_k=3, adaptive_n=1, adaptive_sigma=0.04, trigger_by_pre_execute=False, pre_execute_coef=0.0, vec_num=None, max_trial_num =1):
+        infSet = []
 
         u = np.clip(u, -ctrlrange, ctrlrange)
 
+        #action_space_num = 2
         action_space_num = env.action_space.shape[0]
         action = np.array(u).reshape(-1, action_space_num)
 
@@ -574,17 +456,16 @@ def uaissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                         
                         flag, env = chk_unsafe(s, NP_vec_tmp_i, dt_ratio=dt_ratio, dt_adamba=dt_adamba, env=env,
                                             threshold=threshold, margin=margin, adaptive_k=adaptive_k, adaptive_n=adaptive_n, adaptive_sigma=adaptive_sigma,
-                                            trigger_by_pre_execute=trigger_by_pre_execute, pre_execute_coef=pre_execute_coef, dynamics=dynamics)
+                                            trigger_by_pre_execute=trigger_by_pre_execute, pre_execute_coef=pre_execute_coef)
 
                         # safety gym env itself has clip operation inside
                         if outofbound(limits, NP_vec_tmp_i):
                             break
 
                         if flag == -1:
-                            # predict exception
+                            # simulation expection
                             break
                         
-                        # find the solution
                         if eta <= bound and decrease_flag == 1:
                             NP_vec_tmp_i = opt_solution
                             at_least_1 = True
@@ -596,13 +477,13 @@ def uaissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                             NP_vec_tmp_i = NP_vec_tmp_i + eta * NP_vec_dir_tmp_i
                             eta = eta * 2
                             continue
+                        
                         # monitor for 1st reaching out boundary
                         if flag == 0 and decrease_flag == 0:
                             decrease_flag = 1
                             opt_solution = NP_vec_tmp_i
                             eta = eta * 0.25  # make sure decrease step start at 0.5 of last increasing step
                             continue
-
                         # decrease eta
                         if flag == 1 and decrease_flag == 1:
                             NP_vec_tmp_i = NP_vec_tmp_i + eta * NP_vec_dir_tmp_i
@@ -651,7 +532,7 @@ def uaissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         else:
             return None, valid_adamba_sc, env, None
     
-    def update(prestage=False):
+    def update():
         data = buf.get()
 
         pi_l_old, pi_info_old = compute_loss_pi(data, ac.pi)
@@ -659,7 +540,7 @@ def uaissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         v_l_old = compute_loss_v(data).item()
 
 
-        # UAISSA policy update core impelmentation 
+        # ISSA policy update core impelmentation 
         loss_pi, pi_info = compute_loss_pi(data, ac.pi)
         g = auto_grad(loss_pi, ac.pi) # get the flatten gradient evaluted at pi old 
         kl_div = compute_kl_pi(data, ac.pi)
@@ -707,32 +588,13 @@ def uaissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             mpi_avg_grads(ac.v)    # average grads across MPI processes
             vf_optimizer.step()
 
-        if not prestage:
-            # Log changes from update        
-            kl, ent = pi_info['kl'], pi_info_old['ent']
-            logger.store(LossPi=pi_l_old, LossV=v_l_old,
-                        KL=kl, Entropy=ent,
-                        DeltaLossPi=(loss_pi.item() - pi_l_old),
-                        DeltaLossV=(loss_v.item() - v_l_old),
-                        EpochS = s_ep)
-            
-    def get_d_and_ddot(env):
-        if env.constrain_hazards:
-            vel_vec = env.data.get_body_xvelp('robot')[0:2]
-            robot_pos = env.world.robot_pos()
-            robot_to_hazard_direction = (env.hazards_pos - robot_pos)[:,0:2]
-            h_dist = np.linalg.norm(robot_to_hazard_direction, axis=1)
-            dotd = -np.dot(robot_to_hazard_direction, vel_vec) / h_dist
-            return h_dist, dotd
-        elif env.constrain_pillars:
-            vel_vec = env.data.get_body_xvelp('robot')[0:2]
-            robot_pos = env.world.robot_pos()
-            robot_to_pillar_direction = (env.pillars_pos - robot_pos)[:,0:2]
-            h_dist = np.linalg.norm(robot_to_pillar_direction, axis=1)
-            dotd = -np.dot(robot_to_pillar_direction, vel_vec) / h_dist
-            return h_dist, dotd
-        else:
-            raise NotImplementedError  
+        # Log changes from update        
+        kl, ent = pi_info['kl'], pi_info_old['ent']
+        logger.store(LossPi=pi_l_old, LossV=v_l_old,
+                     KL=kl, Entropy=ent,
+                     DeltaLossPi=(loss_pi.item() - pi_l_old),
+                     DeltaLossV=(loss_v.item() - v_l_old),
+                     EpochS = s_ep)
 
     # Prepare for interaction with environment
     start_time = time.time()
@@ -742,234 +604,181 @@ def uaissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             break
         except:
             print('reset environment is wrong, try next reset')
-    ep_cost, cum_cost, ep_cost_uaissa = 0, 0, 0
+    ep_cost, cum_cost, ep_cost_issa = 0, 0, 0
     cum_cost_eval = 0
+    cum_cost_issa = 0
     AdamBA_cnt = 0
-    UAISSA_cnt = 0
-    dynamics = None
+    ISSA_cnt = 0
     
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
-        if epoch < epochs * warmup_ratio:
-            print(f"Collecting data for dynamics model...({epoch}/{int(epochs * warmup_ratio)})")
-            for t in range(local_steps_per_epoch):
-                a, v, logp, mu, logstd = ac.step(torch.as_tensor(o, dtype=torch.float32))
-                        
-                try: 
-                    next_o, r, d, info = env.step(a)
-                except: 
-                    # simulation exception discovered, discard this episode 
-                    next_o, r, d = o, 0, True # observation will not change, no reward when episode done
-
-                robot_d, robot_ddot = get_d_and_ddot(env)
-                simplified_safe_index = - robot_d**adaptive_n - adaptive_k*robot_ddot
-                index = np.argmax(simplified_safe_index)
-                
-                ep_ret += r
-                ep_len += 1
-
-                # save and log
-                buf.store(o, a, r, v, logp, mu, logstd)
-                dynamics_dataset.store(o, a, robot_d[index], robot_ddot[index])
-                
-                # Update obs (critical!)
-                o = next_o
-
-                timeout = ep_len == max_ep_len
-                terminal = d or timeout
-                epoch_ended = t==local_steps_per_epoch-1
-
-                if terminal or epoch_ended:
-                    if epoch_ended and not(terminal):
-                        print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
-                    # if trajectory didn't reach terminal state, bootstrap value target
-                    if timeout or epoch_ended:
-                        _, v, _, _, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
-                    else:
-                        v = 0
-                    buf.finish_path(v)
-                    while True:
-                        try:
-                            o, ep_ret, ep_len = env.reset(), 0, 0
-                            break
-                        except:
-                            print('reset environment is wrong, try next reset')
-
-            update(prestage=True)
-
-        else:
-            if epoch == epochs * warmup_ratio:
-                print("Training dynamics model...")
-                dynamics = build_dynamics(dynamics_dataset)
-                print("Training dynamics model finished.")
-
-            EP_start_time=time.time()
-            for t in range(local_steps_per_epoch):
-                if t % 1000 == 0:
-                    AdamBA_cnt = 0
-                a, v, logp, mu, logstd = ac.step(torch.as_tensor(o, dtype=torch.float32))
-                        
-                a_safe, _, _, _ = AdamBA_SC(o, a, env, vec_num=5, trigger_by_pre_execute=True, adaptive_k=adaptive_k, adaptive_n=adaptive_n, adaptive_sigma=adaptive_sigma, dynamics=dynamics)
-                if a_safe is None:
-                    a_safe = a
-                if a_safe is not a:
-                    AdamBA_cnt += 1
-                    UAISSA_cnt += 1
-                        
-                try: 
-                    next_o, r, d, info = env.step(a_safe)
-                    assert 'cost' in info.keys()
-                except: 
-                    # simulation exception discovered, discard this episode 
-                    next_o, r, d = o, 0, True # observation will not change, no reward when episode done 
-                    info['cost'] = 0 # no cost when episode done 
-                
-                # Track cumulative cost over training
-                cum_cost += info['cost']
-                
-                ep_ret += r
-                ep_len += 1
-                ep_cost += info['cost']
-
-                # save and log
-                buf.store(o, a, r, v, logp, mu, logstd)
-                
-                # Update obs (critical!)
-                o = next_o
-
-                timeout = ep_len == max_ep_len
-                terminal = d or timeout
-                epoch_ended = t==local_steps_per_epoch-1
-
-                if terminal or epoch_ended:
-                    if epoch_ended and not(terminal):
-                        print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
-                    # if trajectory didn't reach terminal state, bootstrap value target
-                    if timeout or epoch_ended:
-                        _, v, _, _, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
-                    else:
-                        v = 0
-                    buf.finish_path(v)
-                    if terminal:
-                        # only save EpRet / EpLen / EpCost if trajectory finished
-                        logger.store(EpRet_train=ep_ret, EpLen_train=ep_len, EpCost_train=ep_cost, EpCost_UAISSA=ep_cost_uaissa, EpUAISSA_train=UAISSA_cnt,EPTime_train=time.time()-EP_start_time)
-                    while True:
-                        try:
-                            o, ep_ret, ep_len = env.reset(), 0, 0
-                            break
-                        except:
-                            print('reset environment is wrong, try next reset')
-                    ep_cost = 0 # episode cost is zero 
-                    ep_cost_uaissa = 0
-                    UAISSA_cnt = 0
-                    EP_start_time = time.time()
-
-            ###########################################################################################       
-            # evaluate without UAISSA  
-            while True:
-                try:
-                    o, ep_ret_eval, ep_len_eval = env.reset(), 0, 0
-                    break
-                except:
-                    print('reset environment is wrong, try next reset')
-            ep_cost_eval = 0
+        EP_start_time=time.time()
+        for t in range(local_steps_per_epoch):
+            if t % 1000 == 0:
+                AdamBA_cnt = 0
+            a, v, logp, mu, logstd = ac.step(torch.as_tensor(o, dtype=torch.float32))
+                    
+            a_safe, valid_adamba_sc, _, _ = AdamBA_SC(o, a, env, vec_num=5, trigger_by_pre_execute=True, adaptive_k=adaptive_k, adaptive_n=adaptive_n, adaptive_sigma=adaptive_sigma)
+            if a_safe is None:
+                a_safe = a
+            if a_safe is not a:
+                AdamBA_cnt += 1
+                ISSA_cnt += 1
+                    
+            try: 
+                next_o, r, d, info = env.step(a_safe)
+                assert 'cost' in info.keys()
+            except: 
+                # simulation exception discovered, discard this episode 
+                next_o, r, d = o, 0, True # observation will not change, no reward when episode done 
+                info['cost'] = 0 # no cost when episode done 
             
-            EP_start_time_eval=time.time()
-            for t in range(local_steps_per_epoch_eval):
-                a, v, logp, mu, logstd = ac.step(torch.as_tensor(o, dtype=torch.float32))
-                a_safe = a 
-                        
-                try: 
-                    next_o, r, d, info = env.step(a_safe)
-                    assert 'cost' in info.keys()
-                except: 
-                    # simulation exception discovered, discard this episode 
-                    next_o, r, d = o, 0, True # observation will not change, no reward when episode done 
-                    info['cost'] = 0 # no cost when episode done 
-                
-                # Track cumulative cost over training
-                cum_cost_eval += info['cost']
-                
-                ep_ret_eval += r
-                ep_len_eval += 1
-                ep_cost_eval += info['cost']
-
-                logger.store(VVals=v)
-                
-                # Update obs (critical!)
-                o = next_o
-
-                timeout = ep_len_eval == max_ep_len
-                terminal = d or timeout
-                epoch_ended = t==local_steps_per_epoch_eval-1
-
-                if terminal or epoch_ended:
-                    if epoch_ended and not(terminal):
-                        print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
-                    # if trajectory didn't reach terminal state, bootstrap value target
-                    if timeout or epoch_ended:
-                        _, v, _, _, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
-                    else:
-                        v = 0
-                    # buf.finish_path(v)
-                    if terminal:
-                        # only save EpRet / EpLen / EpCost if trajectory finished
-                        logger.store(EpRet=ep_ret_eval, EpLen=ep_len_eval, EpCost=ep_cost_eval,EPTime=time.time()-EP_start_time_eval)
-                    while True:
-                        try:
-                            o, ep_ret_eval, ep_len_eval = env.reset(), 0, 0
-                            break
-                        except:
-                            print('reset environment is wrong, try next reset')
-                    ep_cost_eval = 0 # episode cost is zero 
-                    EP_start_time_eval = time.time()
+            # Track cumulative cost over training
+            cum_cost += info['cost']
             
-            
-            # Save model
-            if ((epoch % save_freq == 0) or (epoch == epochs-1)) and model_save:
-                logger.save_state({'env': env}, None)
+            ep_ret += r
+            ep_len += 1
+            ep_cost += info['cost']
 
-            # Perform UAISSA update!
-            update()
+            # save and log
+            buf.store(o, a, r, v, logp, mu, logstd)
             
-            #=====================================================================#
-            #  Cumulative cost calculations                                       #
-            #=====================================================================#
-            cumulative_cost = mpi_sum(cum_cost)
-            cost_rate = cumulative_cost / ((epoch+1)*steps_per_epoch)
+            # Update obs (critical!)
+            o = next_o
 
-            cumulative_cost_eval = mpi_sum(cum_cost_eval)
-            cost_rate_eval = cumulative_cost_eval / ((epoch+1)*local_steps_per_epoch_eval)
+            timeout = ep_len == max_ep_len
+            terminal = d or timeout
+            epoch_ended = t==local_steps_per_epoch-1
 
-            # Log info about epoch
-            logger.log_tabular('Epoch', epoch)
-            logger.log_tabular('EpRet', average_only=True)
-            logger.log_tabular('EpCost', average_only=True)
-            logger.log_tabular('EpLen', average_only=True)
-            logger.log_tabular('CumulativeCost', cumulative_cost_eval)
-            logger.log_tabular('CostRate', cost_rate_eval)
+            if terminal or epoch_ended:
+                if epoch_ended and not(terminal):
+                    print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
+                # if trajectory didn't reach terminal state, bootstrap value target
+                if timeout or epoch_ended:
+                    _, v, _, _, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
+                else:
+                    v = 0
+                buf.finish_path(v)
+                if terminal:
+                    # only save EpRet / EpLen / EpCost if trajectory finished
+                    logger.store(EpRet_train=ep_ret, EpLen_train=ep_len, EpCost_train=ep_cost, EpCost_ISSA=ep_cost_issa, EpISSA_train=ISSA_cnt,EPTime_train=time.time()-EP_start_time)
+                while True:
+                    try:
+                        o, ep_ret, ep_len = env.reset(), 0, 0
+                        break
+                    except:
+                        print('reset environment is wrong, try next reset')
+                ep_cost = 0 # episode cost is zero 
+                ep_cost_issa = 0
+                ISSA_cnt = 0
+                EP_start_time = time.time()
+
+        ###########################################################################################       
+        # evaluate without ISSA  
+        while True:
+            try:
+                o, ep_ret_eval, ep_len_eval = env.reset(), 0, 0
+                break
+            except:
+                print('reset environment is wrong, try next reset')
+        ep_cost_eval = 0
+        
+        EP_start_time_eval=time.time()
+        for t in range(local_steps_per_epoch_eval):
+            a, v, logp, mu, logstd = ac.step(torch.as_tensor(o, dtype=torch.float32))
+            a_safe = a 
+                    
+            try: 
+                next_o, r, d, info = env.step(a_safe)
+                assert 'cost' in info.keys()
+            except: 
+                # simulation exception discovered, discard this episode 
+                next_o, r, d = o, 0, True # observation will not change, no reward when episode done 
+                info['cost'] = 0 # no cost when episode done 
             
-            logger.log_tabular('EpRet_train', average_only=True)
-            logger.log_tabular('EpCost_train', average_only=True)
-            logger.log_tabular('EpCost_UAISSA', average_only=True)
-            logger.log_tabular('EpLen_train', average_only=True)
-            logger.log_tabular('EpUAISSA_train', average_only=True)
-            logger.log_tabular('EPTime_train', average_only=True)
-            logger.log_tabular('EPTime', average_only=True)
-            logger.log_tabular('CumulativeCost_train', cumulative_cost)
-            logger.log_tabular('CostRate_train', cost_rate)
+            # Track cumulative cost over training
+            cum_cost_eval += info['cost']
             
-            logger.log_tabular('VVals', average_only=True)
-            logger.log_tabular('TotalEnvInteracts', (epoch+1)*steps_per_epoch)
-            logger.log_tabular('LossPi', average_only=True)
-            logger.log_tabular('LossV', average_only=True)
-            logger.log_tabular('DeltaLossPi', average_only=True)
-            logger.log_tabular('DeltaLossV', average_only=True)
-            logger.log_tabular('Entropy', average_only=True)
-            logger.log_tabular('KL', average_only=True)
-            logger.log_tabular('Time', time.time()-start_time)
-            logger.log_tabular('EpochS', average_only=True)
-            logger.dump_tabular()
+            ep_ret_eval += r
+            ep_len_eval += 1
+            ep_cost_eval += info['cost']
+
+            logger.store(VVals=v)
+            
+            # Update obs (critical!)
+            o = next_o
+
+            timeout = ep_len_eval == max_ep_len
+            terminal = d or timeout
+            epoch_ended = t==local_steps_per_epoch_eval-1
+
+            if terminal or epoch_ended:
+                if epoch_ended and not(terminal):
+                    print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
+                # if trajectory didn't reach terminal state, bootstrap value target
+                if timeout or epoch_ended:
+                    _, v, _, _, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
+                else:
+                    v = 0
+                # buf.finish_path(v)
+                if terminal:
+                    # only save EpRet / EpLen / EpCost if trajectory finished
+                    logger.store(EpRet=ep_ret_eval, EpLen=ep_len_eval, EpCost=ep_cost_eval,EPTime=time.time()-EP_start_time_eval)
+                while True:
+                    try:
+                        o, ep_ret_eval, ep_len_eval = env.reset(), 0, 0
+                        break
+                    except:
+                        print('reset environment is wrong, try next reset')
+                ep_cost_eval = 0 # episode cost is zero 
+                EP_start_time_eval = time.time()
+        
+        
+        # Save model
+        if ((epoch % save_freq == 0) or (epoch == epochs-1)) and model_save:
+            logger.save_state({'env': env}, None)
+
+        # Perform ISSA update!
+        update()
+        
+        #=====================================================================#
+        #  Cumulative cost calculations                                       #
+        #=====================================================================#
+        cumulative_cost = mpi_sum(cum_cost)
+        cost_rate = cumulative_cost / ((epoch+1)*steps_per_epoch)
+
+        cumulative_cost_eval = mpi_sum(cum_cost_eval)
+        cost_rate_eval = cumulative_cost_eval / ((epoch+1)*local_steps_per_epoch_eval)
+
+        # Log info about epoch
+        logger.log_tabular('Epoch', epoch)
+        logger.log_tabular('EpRet', average_only=True)
+        logger.log_tabular('EpCost', average_only=True)
+        logger.log_tabular('EpLen', average_only=True)
+        logger.log_tabular('CumulativeCost', cumulative_cost_eval)
+        logger.log_tabular('CostRate', cost_rate_eval)
+        
+        logger.log_tabular('EpRet_train', average_only=True)
+        logger.log_tabular('EpCost_train', average_only=True)
+        logger.log_tabular('EpCost_ISSA', average_only=True)
+        logger.log_tabular('EpLen_train', average_only=True)
+        logger.log_tabular('EpISSA_train', average_only=True)
+        logger.log_tabular('EPTime_train', average_only=True)
+        logger.log_tabular('EPTime', average_only=True)
+        logger.log_tabular('CumulativeCost_train', cumulative_cost)
+        logger.log_tabular('CostRate_train', cost_rate)
+        
+        logger.log_tabular('VVals', average_only=True)
+        logger.log_tabular('TotalEnvInteracts', (epoch+1)*steps_per_epoch)
+        logger.log_tabular('LossPi', average_only=True)
+        logger.log_tabular('LossV', average_only=True)
+        logger.log_tabular('DeltaLossPi', average_only=True)
+        logger.log_tabular('DeltaLossV', average_only=True)
+        logger.log_tabular('Entropy', average_only=True)
+        logger.log_tabular('KL', average_only=True)
+        logger.log_tabular('Time', time.time()-start_time)
+        logger.log_tabular('EpochS', average_only=True)
+        logger.dump_tabular()
         
         
 def create_env(args):
@@ -988,13 +797,12 @@ if __name__ == '__main__':
     parser.add_argument('--steps', type=int, default=30000)
     parser.add_argument('--max_ep_len', type=int, default=1000)
     parser.add_argument('--epochs', type=int, default=200)
-    parser.add_argument('--exp_name', type=str, default='uaissa')
+    parser.add_argument('--exp_name', type=str, default='trpoissa')
     parser.add_argument('--model_save', action='store_true')
     parser.add_argument('--target_kl', type=float, default=0.02)
     parser.add_argument('--adaptive_k', type=float, default=1)
     parser.add_argument('--adaptive_n', type=float, default=1)
     parser.add_argument('--adaptive_sigma', type=float, default=0.04)
-    parser.add_argument('--warmup_ratio', type=float, default=0.3)
     args = parser.parse_args()
 
     mpi_fork(args.cpu)  # run parallel code with mpi
@@ -1005,9 +813,8 @@ if __name__ == '__main__':
     # whether to save model
     model_save = True if args.model_save else False
 
-    uaissa(lambda : create_env(args), actor_critic=core.MLPActorCritic,
+    trpoissa(lambda : create_env(args), actor_critic=core.MLPActorCritic,
         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma, 
         seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
         logger_kwargs=logger_kwargs, model_save=model_save, target_kl=args.target_kl, max_ep_len=args.max_ep_len,
-        adaptive_k=args.adaptive_k, adaptive_n=args.adaptive_n, adaptive_sigma=args.adaptive_sigma,
-        warmup_ratio=args.warmup_ratio)
+        adaptive_k = args.adaptive_k, adaptive_n = args.adaptive_n, adaptive_sigma = args.adaptive_sigma)
