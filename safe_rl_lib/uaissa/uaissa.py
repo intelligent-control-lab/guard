@@ -475,7 +475,6 @@ def uaissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
             expectation = np.mean(safe_indexes)
             std = np.std(safe_indexes)
-            print(expectation, std)
             safe_index_future_upperbound = expectation + L_beta * std
 
             if safe_index_future_upperbound < max(0, safe_index_now):
@@ -995,6 +994,7 @@ if __name__ == '__main__':
     parser.add_argument('--adaptive_n', type=float, default=1)
     parser.add_argument('--adaptive_sigma', type=float, default=0.04)
     parser.add_argument('--warmup_ratio', type=float, default=0.3)
+    parser.add_argument('--L_beta', type=float, default=0.01)
     args = parser.parse_args()
 
     mpi_fork(args.cpu)  # run parallel code with mpi
@@ -1010,4 +1010,4 @@ if __name__ == '__main__':
         seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
         logger_kwargs=logger_kwargs, model_save=model_save, target_kl=args.target_kl, max_ep_len=args.max_ep_len,
         adaptive_k=args.adaptive_k, adaptive_n=args.adaptive_n, adaptive_sigma=args.adaptive_sigma,
-        warmup_ratio=args.warmup_ratio)
+        warmup_ratio=args.warmup_ratio, L_beta=args.L_beta)
