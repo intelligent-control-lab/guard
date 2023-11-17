@@ -134,7 +134,6 @@ class MLPCritic(nn.Module):
 
 class MLPActorCritic(nn.Module):
 
-
     def __init__(self, observation_space, action_space, 
                  hidden_sizes=(64,64), activation=nn.Tanh):
         super().__init__()
@@ -164,26 +163,24 @@ class MLPActorCritic(nn.Module):
         return self.step(obs)[0]
     
 class DynamicsModel(nn.Module):
+    
     def __init__(self, input_dim, hidden_dim, output_dim, dropout_prob=0.1, model_lam=1e-2):
         super().__init__()
         self.dropout_prob = dropout_prob
         self.model_lam = model_lam
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, output_dim)
-        self.dropout = nn.Dropout(dropout_prob)
-        self.relu = nn.ReLU()
+        self.net_list = []
+        self.net_list += [nn.Linear(input_dim, hidden_dim[0]), nn.ReLU(), nn.Dropout(dropout_prob)]
+        for i in range(len(hidden_dim)-1):
+            self.net_list += [nn.Linear(hidden_dim[i], hidden_dim[i+1]), nn.ReLU(), nn.Dropout(dropout_prob)]
+        self.net_list += [nn.Linear(hidden_dim[-1], output_dim), nn.Identity()]
+        self.net = nn.Sequential(*self.net_list)
     
     def forward(self, x):
-        x = self.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = self.relu(self.fc2(x))
-        x = self.dropout(x)
-        return self.fc3(x)
+       return self.net(x)
     
     @property
-    def regurization(self):
-        fc1_reg = (1-self.dropout_prob)*torch.sum(self.fc1.weight**2) + torch.sum(self.fc1.bias**2)
-        fc2_reg = (1-self.dropout_prob)*torch.sum(self.fc2.weight**2) + torch.sum(self.fc2.bias**2)
-        fc3_reg = (1-self.dropout_prob)*torch.sum(self.fc3.weight**2) + torch.sum(self.fc3.bias**2)
-        return self.model_lam*(fc1_reg + fc2_reg + fc3_reg)
+    def regulization(self):
+        total_reg = 0.0
+        for i in range(0, len(self.net), 3):
+            total_reg += (1-self.dropout_prob)*torch.sum(self.net[i].weight**2) + torch.sum(self.net[i].bias**2)
+        return self.model_lam*total_reg

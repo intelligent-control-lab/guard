@@ -562,6 +562,7 @@ def cpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 next_o, r, d = o, 0, True # observation will not change, no reward when episode done 
                 info['cost'] = 0 # no cost when episode done     
             # Track cumulative cost over training
+            
             cum_cost += info['cost']
             ep_ret += r
             ep_cost_ret += info['cost'] * (gamma ** t)

@@ -284,7 +284,6 @@ def trpoissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     # Set up experience buffer
     local_steps_per_epoch = int(steps_per_epoch / num_procs())
     buf = ISSABuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
-    local_steps_per_epoch_eval = 10000
 
     def compute_kl_pi(data, cur_pi):
         """
@@ -604,9 +603,7 @@ def trpoissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             break
         except:
             print('reset environment is wrong, try next reset')
-    ep_cost, cum_cost, ep_cost_issa = 0, 0, 0
-    cum_cost_eval = 0
-    cum_cost_issa = 0
+    ep_cost, cum_cost= 0, 0
     AdamBA_cnt = 0
     ISSA_cnt = 0
     
@@ -618,7 +615,7 @@ def trpoissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 AdamBA_cnt = 0
             a, v, logp, mu, logstd = ac.step(torch.as_tensor(o, dtype=torch.float32))
                     
-            a_safe, valid_adamba_sc, _, _ = AdamBA_SC(o, a, env, vec_num=5, trigger_by_pre_execute=True, adaptive_k=adaptive_k, adaptive_n=adaptive_n, adaptive_sigma=adaptive_sigma)
+            a_safe, _, _, _ = AdamBA_SC(o, a, env, vec_num=5, trigger_by_pre_execute=True, adaptive_k=adaptive_k, adaptive_n=adaptive_n, adaptive_sigma=adaptive_sigma)
             if a_safe is None:
                 a_safe = a
             if a_safe is not a:
@@ -661,7 +658,7 @@ def trpoissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 buf.finish_path(v)
                 if terminal:
                     # only save EpRet / EpLen / EpCost if trajectory finished
-                    logger.store(EpRet_train=ep_ret, EpLen_train=ep_len, EpCost_train=ep_cost, EpCost_ISSA=ep_cost_issa, EpISSA_train=ISSA_cnt,EPTime_train=time.time()-EP_start_time)
+                    logger.store(EpRet=ep_ret, EpLen=ep_len, EpCost=ep_cost, EpISSA=ISSA_cnt,EPTime=time.time()-EP_start_time)
                 while True:
                     try:
                         o, ep_ret, ep_len = env.reset(), 0, 0
@@ -669,70 +666,8 @@ def trpoissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                     except:
                         print('reset environment is wrong, try next reset')
                 ep_cost = 0 # episode cost is zero 
-                ep_cost_issa = 0
                 ISSA_cnt = 0
                 EP_start_time = time.time()
-
-        ###########################################################################################       
-        # evaluate without ISSA  
-        while True:
-            try:
-                o, ep_ret_eval, ep_len_eval = env.reset(), 0, 0
-                break
-            except:
-                print('reset environment is wrong, try next reset')
-        ep_cost_eval = 0
-        
-        EP_start_time_eval=time.time()
-        for t in range(local_steps_per_epoch_eval):
-            a, v, logp, mu, logstd = ac.step(torch.as_tensor(o, dtype=torch.float32))
-            a_safe = a 
-                    
-            try: 
-                next_o, r, d, info = env.step(a_safe)
-                assert 'cost' in info.keys()
-            except: 
-                # simulation exception discovered, discard this episode 
-                next_o, r, d = o, 0, True # observation will not change, no reward when episode done 
-                info['cost'] = 0 # no cost when episode done 
-            
-            # Track cumulative cost over training
-            cum_cost_eval += info['cost']
-            
-            ep_ret_eval += r
-            ep_len_eval += 1
-            ep_cost_eval += info['cost']
-
-            logger.store(VVals=v)
-            
-            # Update obs (critical!)
-            o = next_o
-
-            timeout = ep_len_eval == max_ep_len
-            terminal = d or timeout
-            epoch_ended = t==local_steps_per_epoch_eval-1
-
-            if terminal or epoch_ended:
-                if epoch_ended and not(terminal):
-                    print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
-                # if trajectory didn't reach terminal state, bootstrap value target
-                if timeout or epoch_ended:
-                    _, v, _, _, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
-                else:
-                    v = 0
-                # buf.finish_path(v)
-                if terminal:
-                    # only save EpRet / EpLen / EpCost if trajectory finished
-                    logger.store(EpRet=ep_ret_eval, EpLen=ep_len_eval, EpCost=ep_cost_eval,EPTime=time.time()-EP_start_time_eval)
-                while True:
-                    try:
-                        o, ep_ret_eval, ep_len_eval = env.reset(), 0, 0
-                        break
-                    except:
-                        print('reset environment is wrong, try next reset')
-                ep_cost_eval = 0 # episode cost is zero 
-                EP_start_time_eval = time.time()
-        
         
         # Save model
         if ((epoch % save_freq == 0) or (epoch == epochs-1)) and model_save:
@@ -747,28 +682,16 @@ def trpoissa(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         cumulative_cost = mpi_sum(cum_cost)
         cost_rate = cumulative_cost / ((epoch+1)*steps_per_epoch)
 
-        cumulative_cost_eval = mpi_sum(cum_cost_eval)
-        cost_rate_eval = cumulative_cost_eval / ((epoch+1)*local_steps_per_epoch_eval)
-
         # Log info about epoch
         logger.log_tabular('Epoch', epoch)
         logger.log_tabular('EpRet', average_only=True)
         logger.log_tabular('EpCost', average_only=True)
         logger.log_tabular('EpLen', average_only=True)
-        logger.log_tabular('CumulativeCost', cumulative_cost_eval)
-        logger.log_tabular('CostRate', cost_rate_eval)
-        
-        logger.log_tabular('EpRet_train', average_only=True)
-        logger.log_tabular('EpCost_train', average_only=True)
-        logger.log_tabular('EpCost_ISSA', average_only=True)
-        logger.log_tabular('EpLen_train', average_only=True)
-        logger.log_tabular('EpISSA_train', average_only=True)
-        logger.log_tabular('EPTime_train', average_only=True)
+        logger.log_tabular('EpISSA', average_only=True)
         logger.log_tabular('EPTime', average_only=True)
-        logger.log_tabular('CumulativeCost_train', cumulative_cost)
-        logger.log_tabular('CostRate_train', cost_rate)
+        logger.log_tabular('CumulativeCost', cumulative_cost)
+        logger.log_tabular('CostRate', cost_rate)
         
-        logger.log_tabular('VVals', average_only=True)
         logger.log_tabular('TotalEnvInteracts', (epoch+1)*steps_per_epoch)
         logger.log_tabular('LossPi', average_only=True)
         logger.log_tabular('LossV', average_only=True)

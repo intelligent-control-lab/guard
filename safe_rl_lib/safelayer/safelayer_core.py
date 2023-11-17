@@ -169,6 +169,7 @@ class C_Critic(nn.Module):
             if len(obs.shape) == 1:
                 assert len(obs.shape) == len(act.shape)
                 denomin = torch.dot(g,g) + 1e-8
+                print(g, denomin, numer)
             else:
                 denomin = torch.bmm(g.unsqueeze(1),g.unsqueeze(2)).view(-1) + 1e-8
             mult = F.relu(numer / denomin)

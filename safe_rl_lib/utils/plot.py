@@ -158,14 +158,13 @@ def get_all_datasets(all_logdirs, legend=None, select=None, exclude=None):
     return data
 
 
-def make_plots(all_logdirs, legend=None, xaxis=None, values=None, count=False,  
+def make_plots(all_logdirs, legend=None, xaxis=None, values=[], count=False,  
                font_scale=1.5, smooth=1, select=None, exclude=None, estimator='mean', results_dir=None, title='reward', reward_flag=True, cost_flag=False):
     # create a separate folder for each plot 
     # results_dir = osp.join(results_dir, title)
     data = get_all_datasets(all_logdirs, legend, select, exclude)
     # values = values if isinstance(values, list) else [values]
-    
-    values = []
+
     if reward_flag:
         values.append('Reward_Performance')
     if cost_flag:
@@ -201,7 +200,7 @@ def main():
                         help='the title for the saved plot')
     parser.add_argument('--legend', '-l', nargs='*')
     parser.add_argument('--xaxis', '-x', default='TotalEnvInteracts')
-    parser.add_argument('--value', '-y', default='Performance', nargs='*')
+    parser.add_argument('--value', '-y', default=[], nargs='*')
     parser.add_argument('--reward', action='store_true')
     parser.add_argument('--cost', action='store_true')
     parser.add_argument('--count', action='store_true')

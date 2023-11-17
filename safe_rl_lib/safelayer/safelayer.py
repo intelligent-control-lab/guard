@@ -470,6 +470,7 @@ def safelayer(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0
             
             # apply safe layer to get corrected action
             warmup_ratio = 1.0/3.0
+            warmup_ratio = 0.0
             if epoch > epochs * warmup_ratio:
                 a_safe = ac.ccritic.safety_correction(o, a, prev_c)
             else:
