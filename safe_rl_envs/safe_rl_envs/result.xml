@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mujoco>
+	<size njmax="3000" nconmax="1000"></size>
+	<compiler meshdir="assets" autolimits="true"></compiler>
+	<option gravity="0 0 0" timestep="0.002"></option>
+	<default>
+		<joint limited="false" damping="1000" range="-180 180"></joint>
+		<geom condim="6" size="0.032" type="capsule" density="0.01"></geom>
+		<motor ctrllimited="true" ctrlrange="-1.0 1.0" gear="2500"></motor>
+		<site size="0.02" type="sphere" rgba="0 0 1 1"></site>
+		<default class="lrmate">
+			<material specular="0.5" shininess="0.25"></material>
+			<joint axis="0 0 1"></joint>
+			<general gaintype="fixed" biastype="affine" gainprm="2000" biasprm="0 -2000 -200"></general>
+			<default class="visual">
+				<geom type="mesh" contype="0" conaffinity="0" group="2"></geom>
+			</default>
+			<default class="collision">
+				<geom group="3" material="color_fanuc_red"></geom>
+			</default>
+			<site size="0.001" rgba="1 0 0 1" group="4"></site>
+		</default>
+	</default>
+	<asset>
+		<material name="MatPlane" reflectance="0.1" shininess="0.1" specular="0.1" texrepeat="10 10" texture="texplane"></material>
+		<material class="lrmate" name="color_fanuc_yellow" rgba="0.96 0.76 0.13 1.0"></material>
+		<material class="lrmate" name="color_fanuc_white" rgba="0.86 0.85 0.81 1.0"></material>
+		<material class="lrmate" name="color_fanuc_grey" rgba="0.34 0.35 0.36 0.5"></material>
+		<material class="lrmate" name="color_fanuc_black" rgba="0.15 0.15 0.15 1.0"></material>
+		<material class="lrmate" name="color_fanuc_red" rgba="0.9 0.0 0.0 0.2"></material>
+		<mesh file="/home/yifan/guard/guard_new/safe_rl_envs/safe_rl_envs/xmls/fanuc_lr_mate/assets/link_0.stl"></mesh>
+		<mesh file="/home/yifan/guard/guard_new/safe_rl_envs/safe_rl_envs/xmls/fanuc_lr_mate/assets/link_1.stl"></mesh>
+		<mesh file="/home/yifan/guard/guard_new/safe_rl_envs/safe_rl_envs/xmls/fanuc_lr_mate/assets/link_2.stl"></mesh>
+		<mesh file="/home/yifan/guard/guard_new/safe_rl_envs/safe_rl_envs/xmls/fanuc_lr_mate/assets/link_3.stl"></mesh>
+		<mesh file="/home/yifan/guard/guard_new/safe_rl_envs/safe_rl_envs/xmls/fanuc_lr_mate/assets/link_4.stl"></mesh>
+		<mesh file="/home/yifan/guard/guard_new/safe_rl_envs/safe_rl_envs/xmls/fanuc_lr_mate/assets/link_5.stl"></mesh>
+		<mesh file="/home/yifan/guard/guard_new/safe_rl_envs/safe_rl_envs/xmls/fanuc_lr_mate/assets/link_6.stl"></mesh>
+		<texture name="texplane" builtin="checker" height="100" width="100" rgb1="0.7 0.7 0.7" rgb2="0.8 0.8 0.8" type="2d"></texture>
+		<texture type="skybox" builtin="gradient" rgb1="0.527 0.582 0.906" rgb2="0.1 0.1 0.35" width="800" height="800" markrgb="1 1 1" mark="random" random="0.001"></texture>
+	</asset>
+	<worldbody>
+		<geom name="floor" size="3.5 3.5 0.1" type="plane" condim="6" rgba="1 1 1 1" material="MatPlane"></geom>
+		<camera name="fixednear" pos="0 -2 2" zaxis="0 -1 1"></camera>
+		<camera name="fixedfar" pos="0 -5 5" zaxis="0 -1 1"></camera>
+		<body name="robot" pos="4.857521260602153e-10 -2.8323042920187505e-11 0.0" quat="1.0 0.0 0.0 0.0">
+			<camera name="vision" pos="0 0 .5" xyaxes="0 -1 0 .4 0 1" fovy="90"></camera>
+			<camera name="track" mode="track" pos="0.0 -2.0 2" xyaxes="1.0 -0.0 0 0.0 1.0 1"></camera>
+			<site name="robot" pos="0 0 0" rgba="1 0 0 0"></site>
+			<body name="link_1" pos="0.0 0.0 0.0">
+				<geom class="collision" fromto="0.0 0.0 0.0 0.0 0.0 0.33" size="0.13" name="link_1"></geom>
+				<geom class="visual" material="color_fanuc_black" mesh="link_0" name="link_1_visual"></geom>
+				<site name="center_link_1" pos="0 0 0.165"></site>
+				<body name="link_2" pos="0.0 0.0 0.330">
+					<joint type="hinge" axis="0 0 1" name="joint_1"></joint>
+					<geom class="collision" fromto="0.0 0.0 0.0 0.050 0.0 0.0" size="0.13" name="link_2"></geom>
+					<geom class="visual" material="color_fanuc_yellow" mesh="link_1" name="link_2_visual"></geom>
+					<site name="center_link_2" pos="0.025 0.0 0.0"></site>
+					<body name="link_3" pos="0.050 0 0">
+						<joint type="hinge" axis="0 1 0" name="joint_2"></joint>
+						<geom class="collision" fromto="0.0 0.0 0.0 0 0 0.440" size="0.15" name="link_3"></geom>
+						<geom class="visual" material="color_fanuc_yellow" mesh="link_2" name="link_3_visual"></geom>
+						<site name="center_link_3" pos="0.0 0.0 0.220"></site>
+						<body name="link_4" pos="0 0 0.440">
+							<joint type="hinge" axis="0 -1 0" name="joint_3"></joint>
+							<geom class="collision" fromto="0.0 0.0 0.0 0 0 0.035" size="0.1" name="link_4"></geom>
+							<geom class="visual" material="color_fanuc_yellow" mesh="link_3" name="link_4_visual"></geom>
+							<site name="center_link_4" pos="0.0 0.0 00175"></site>
+							<body name="link_5" pos="0 0 0.035">
+								<joint type="hinge" axis="-1 0 0" name="joint_4"></joint>
+								<geom class="collision" fromto="0.0 0.0 0.0 0.420 0.0 0.0" size="0.1" name="link_5"></geom>
+								<geom class="visual" material="color_fanuc_yellow" mesh="link_4" name="link_5_visual"></geom>
+								<site name="center_link_5" pos="0.21 0.0 0.0"></site>
+								<body name="link_6" pos="0.420 0 0">
+									<joint type="hinge" axis="0 -1 0" name="joint_5"></joint>
+									<geom class="collision" fromto="0.0 0.0 0.0 0.080 0 0" size="0.1" name="link_6"></geom>
+									<geom class="visual" material="color_fanuc_yellow" mesh="link_5" name="link_6_visual"></geom>
+									<site name="center_link_6" pos="0.04 0.0 0.0"></site>
+									<body name="link_7" pos="0.080 0 0">
+										<joint type="hinge" axis="-1 0 0" name="joint_6"></joint>
+										<geom class="collision" pos="0.0 0.0 0.0" type="sphere" size="0.1" name="link_7"></geom>
+										<geom class="visual" material="color_fanuc_black" mesh="link_6" name="link_7_visual"></geom>
+										<site name="center_link_7" pos="0.0 0.0 0.0"></site>
+									</body>
+								</body>
+							</body>
+						</body>
+					</body>
+				</body>
+			</body>
+		</body>
+		<body name="goal" pos="1.2780582201702666 -0.9958254602558928 0.6280613505767182" quat="-0.4982693776087498 0.0 0.0 0.8670222761483058">
+			<geom name="goal" type="sphere" size="0.2" rgba="0.0 1.0 0.0 0.25" group="0" contype="0" conaffinity="0"></geom>
+		</body>
+		<body name="hazard3D0" pos="-0.6422157019872433 -0.5727822450461211 0.5561467167910048" quat="0.7704107303737541 0.0 0.0 0.6375478856721107">
+			<geom name="hazard3D0" type="sphere" size="0.2" rgba="0.0 0.0 1.0 0.25" group="3" contype="0" conaffinity="0"></geom>
+		</body>
+		<body name="hazard3D1" pos="0.29198841333913883 0.8701727770226397 0.599401811836316" quat="-0.9679939595952471 0.0 0.0 0.2509734929969996">
+			<geom name="hazard3D1" type="sphere" size="0.2" rgba="0.0 0.0 1.0 0.25" group="3" contype="0" conaffinity="0"></geom>
+		</body>
+		<light cutoff="100" diffuse="1 1 1" dir="0 0 -1" directional="true" exponent="1" pos="0 0 0.5" specular="0 0 0" castshadow="false"></light>
+	</worldbody>
+	<sensor>
+		<touch site="center_link_7" name="touch_end_effector"></touch>
+		<jointpos joint="joint_1" name="jointpos_joint_1"></jointpos>
+		<jointpos joint="joint_2" name="jointpos_joint_2"></jointpos>
+		<jointpos joint="joint_3" name="jointpos_joint_3"></jointpos>
+		<jointpos joint="joint_4" name="jointpos_joint_4"></jointpos>
+		<jointpos joint="joint_5" name="jointpos_joint_5"></jointpos>
+		<jointpos joint="joint_6" name="jointpos_joint_6"></jointpos>
+		<jointvel joint="joint_1" name="jointvel_joint_1"></jointvel>
+		<jointvel joint="joint_2" name="jointvel_joint_2"></jointvel>
+		<jointvel joint="joint_3" name="jointvel_joint_3"></jointvel>
+		<jointvel joint="joint_4" name="jointvel_joint_4"></jointvel>
+		<jointvel joint="joint_5" name="jointvel_joint_5"></jointvel>
+		<jointvel joint="joint_6" name="jointvel_joint_6"></jointvel>
+		<accelerometer site="center_link_1" name="accelerometer_link_1"></accelerometer>
+		<accelerometer site="center_link_2" name="accelerometer_link_2"></accelerometer>
+		<accelerometer site="center_link_3" name="accelerometer_link_3"></accelerometer>
+		<accelerometer site="center_link_4" name="accelerometer_link_4"></accelerometer>
+		<accelerometer site="center_link_5" name="accelerometer_link_5"></accelerometer>
+		<accelerometer site="center_link_6" name="accelerometer_link_6"></accelerometer>
+		<accelerometer site="center_link_7" name="accelerometer_link_7"></accelerometer>
+		<velocimeter site="center_link_1" name="velocimeter_link_1"></velocimeter>
+		<velocimeter site="center_link_2" name="velocimeter_link_2"></velocimeter>
+		<velocimeter site="center_link_3" name="velocimeter_link_3"></velocimeter>
+		<velocimeter site="center_link_4" name="velocimeter_link_4"></velocimeter>
+		<velocimeter site="center_link_5" name="velocimeter_link_5"></velocimeter>
+		<velocimeter site="center_link_6" name="velocimeter_link_6"></velocimeter>
+		<velocimeter site="center_link_7" name="velocimeter_link_7"></velocimeter>
+		<gyro site="center_link_1" name="gyro_link_1"></gyro>
+		<gyro site="center_link_2" name="gyro_link_2"></gyro>
+		<gyro site="center_link_3" name="gyro_link_3"></gyro>
+		<gyro site="center_link_4" name="gyro_link_4"></gyro>
+		<gyro site="center_link_5" name="gyro_link_5"></gyro>
+		<gyro site="center_link_6" name="gyro_link_6"></gyro>
+		<gyro site="center_link_7" name="gyro_link_7"></gyro>
+		<magnetometer site="center_link_1" name="magnetometer_link_1"></magnetometer>
+		<magnetometer site="center_link_2" name="magnetometer_link_2"></magnetometer>
+		<magnetometer site="center_link_3" name="magnetometer_link_3"></magnetometer>
+		<magnetometer site="center_link_4" name="magnetometer_link_4"></magnetometer>
+		<magnetometer site="center_link_5" name="magnetometer_link_5"></magnetometer>
+		<magnetometer site="center_link_6" name="magnetometer_link_6"></magnetometer>
+		<magnetometer site="center_link_7" name="magnetometer_link_7"></magnetometer>
+		<subtreecom body="robot" name="subtreecom"></subtreecom>
+		<subtreelinvel body="robot" name="subtreelinvel"></subtreelinvel>
+		<subtreeangmom body="robot" name="subtreeangmom"></subtreeangmom>
+	</sensor>
+	<actuator>
+		<motor name="joint_1" joint="joint_1"></motor>
+		<motor name="joint_2" joint="joint_2"></motor>
+		<motor name="joint_3" joint="joint_3"></motor>
+		<motor name="joint_4" joint="joint_4"></motor>
+		<motor name="joint_5" joint="joint_5"></motor>
+		<motor name="joint_6" joint="joint_6"></motor>
+	</actuator>
+	<equality>
+	</equality>
+</mujoco>

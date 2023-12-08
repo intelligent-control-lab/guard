@@ -5,8 +5,8 @@ import xmltodict
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
-from mujoco_py import const, load_model_from_path, load_model_from_xml, MjSim, MjViewer, MjRenderContextOffscreen
-
+# from mujoco_py import const, load_model_from_path, load_model_from_xml, MjSim, MjViewer, MjRenderContextOffscreen
+import mujoco
 import safe_rl_envs
 import sys
 
@@ -85,16 +85,21 @@ class World:
             assert key in self.DEFAULT, f'Bad key {key}'
             setattr(self, key, value)
 
-    @property
-    def data(self):
-        ''' Helper to get the simulation data instance '''
-        return self.sim.data
+    # @property
+    # def data(self):
+    #     ''' Helper to get the simulation data instance '''
+    #     return self.data
+    
+    # @property
+    # def model(self):
+    #     ''' Helper to get the simulation model instance '''
+    #     return self.model
 
     # TODO: remove this when mujoco-py fix is merged and a new version is pushed
     # https://github.com/openai/mujoco-py/pull/354
     # Then all uses of `self.world.get_sensor()` should change to `self.data.get_sensor`.
     def get_sensor(self, name):
-        id = self.model.sensor_name2id(name)
+        id = self.model.sensor(name).id
         adr = self.model.sensor_adr[id]
         dim = self.model.sensor_dim[id]
         return self.data.sensordata[adr:adr + dim].copy()
@@ -129,25 +134,48 @@ class World:
             equality['weld'] = []
 
         # Add asset section if missing
-        if 'asset' not in self.xml['mujoco']:
-            # old default rgb1: ".4 .5 .6"
-            # old default rgb2: "0 0 0"
-            # light pink: "1 0.44 .81"
-            # light blue: "0.004 0.804 .996"
-            # light purple: ".676 .547 .996"
-            # med blue: "0.527 0.582 0.906"
-            # indigo: "0.293 0 0.508"
-            asset = xmltodict.parse('''
-                <asset>
-                    <texture type="skybox" builtin="gradient" rgb1="0.527 0.582 0.906" rgb2="0.1 0.1 0.35"
-                        width="800" height="800" markrgb="1 1 1" mark="random" random="0.001"/>
-                    <texture name="texplane" builtin="checker" height="100" width="100"
-                        rgb1="0.7 0.7 0.7" rgb2="0.8 0.8 0.8" type="2d"/>
-                    <material name="MatPlane" reflectance="0.1" shininess="0.1" specular="0.1"
-                        texrepeat="10 10" texture="texplane"/>
-                </asset>
-                ''')
-            self.xml['mujoco']['asset'] = asset['asset']
+        asset = xmltodict.parse(f'''
+            <asset>
+                <texture name="texplane" builtin="checker" height="100" width="100"
+                    rgb1="0.7 0.7 0.7" rgb2="0.8 0.8 0.8" type="2d"/>
+                <texture type="skybox" builtin="gradient" rgb1="0.527 0.582 0.906" rgb2="0.1 0.1 0.35"
+                    width="800" height="800" markrgb="1 1 1" mark="random" random="0.001"/>
+                <material name="MatPlane" reflectance="0.1" shininess="0.1" specular="0.1"
+                    texrepeat="10 10" texture="texplane"/>
+                    
+            </asset>
+            ''')
+        xml_path = os.path.dirname(os.path.join(BASE_DIR, self.robot_base))
+        if 'asset' in self.xml['mujoco']:
+            for key, item in self.xml['mujoco']['asset'].items(): 
+                if isinstance(item, list) == 0:
+                    item = [item]
+                for i in item:
+                    if '@file' in i.keys():
+                        path = i['@file']
+                        if key == 'mesh':
+                            new_path = os.path.join(xml_path, self.xml['mujoco']['compiler']['@meshdir'], path)
+                        if key == 'texture':
+                            new_path = os.path.join(xml_path, self.xml['mujoco']['compiler']['@texturedir'], path)
+                        i['@file'] = new_path
+        else:
+            self.xml['mujoco']['asset'] = {}
+        
+        for key, item in asset['asset'].items(): 
+            if isinstance(item, list) == 0:
+                item = [item]
+            for i in item:
+                if '@file' in i.keys():
+                    path = i['@file']
+                    new_path = os.path.join(BASE_DIR, path)
+                    i['@file'] = new_path
+            if key in self.xml['mujoco']['asset'].keys():
+                item2 = self.xml['mujoco']['asset'][key]
+                if isinstance(item2, list) == 0:
+                    item2 = [item2]
+                for i in item2:
+                    item.append(i)
+            self.xml['mujoco']['asset'][key] = item
 
 
         # Add light to the XML dictionary
@@ -291,57 +319,61 @@ class World:
         # Instantiate simulator
         # print(xmltodict.unparse(self.xml, pretty=True))
         self.xml_string = xmltodict.unparse(self.xml)
-        self.model = load_model_from_xml(self.xml_string)
-        self.sim = MjSim(self.model)
+        self.model = mujoco.MjModel.from_xml_string(self.xml_string)
+        self.data = mujoco.MjData(self.model)
+        # with open('result.xml', 'w') as result_file:
+        #     result_file.write(xmltodict.unparse(self.xml, pretty=True))
+        
+        
 
         # Add render contexts to newly created sim
-        if self.render_context is None and self.observe_vision:
-            render_context = MjRenderContextOffscreen(self.sim, device_id=-1, quiet=True)
-            render_context.vopt.geomgroup[:] = 1
-            self.render_context = render_context
+        # if self.render_context is None and self.observe_vision:
+        #     render_context = MjRenderContextOffscreen(self, device_id=-1, quiet=True)
+        #     render_context.vopt.geomgroup[:] = 1
+        #     self.render_context = render_context
 
-        if self.render_context is not None:
-            self.render_context.update_sim(self.sim)
+        # if self.render_context is not None:
+        #     self.render_context.update_sim(self)
 
         # Recompute simulation intrinsics from new position
-        self.sim.forward()
+        mujoco.mj_forward(self.model, self.data)
 
     def rebuild(self, config={}, state=True):
         ''' Build a new sim from a model if the model changed '''
         if state:
-            old_state = self.sim.get_state()
+            old_state = self.get_state()
         #self.config.update(deepcopy(config))
         #self.parse(self.config)
         self.parse(config)
         self.build()
         if state:
-            self.sim.set_state(old_state)
-        self.sim.forward()
+            self.set_state(old_state)
+        mujoco.mj_forward(self.model, self.data)
 
     def reset(self, build=True):
-        ''' Reset the world (sim is accessed through self.sim) '''
+        ''' Reset the world (sim is accessed through self) '''
         if build:
             self.build()
         # set flag so that renderer knows to update sim
         self.update_viewer_sim = True
 
-    def render(self, mode='human'):
-        ''' Render the environment to the screen '''
-        if self.viewer is None:
-            self.viewer = MjViewer(self.sim)
-            # Turn all the geom groups on
-            self.viewer.vopt.geomgroup[:] = 1
-            # Set camera if specified
-            if mode == 'human':
-                self.viewer.cam.fixedcamid = -1
-                self.viewer.cam.type = const.CAMERA_FREE
-            else:
-                self.viewer.cam.fixedcamid = self.model.camera_name2id(mode)
-                self.viewer.cam.type = const.CAMERA_FIXED
-        if self.update_viewer_sim:
-            self.viewer.update_sim(self.sim)
-            self.update_viewer_sim = False
-        self.viewer.render()
+    # def render(self, mode='human'):
+    #     ''' Render the environment to the screen '''
+    #     if self.viewer is None:
+    #         self.viewer = MjViewer(self)
+    #         # Turn all the geom groups on
+    #         self.viewer.vopt.geomgroup[:] = 1
+    #         # Set camera if specified
+    #         if mode == 'human':
+    #             self.viewer.cam.fixedcamid = -1
+    #             self.viewer.cam.type = mjCAMERA_FREE
+    #         else:
+    #             self.viewer.cam.fixedcamid = self.model.camera_name2id(mode)
+    #             self.viewer.cam.type = mjCAMERA_FIXED
+    #     if self.update_viewer_sim:
+    #         self.viewer.update_sim(self)
+    #         self.update_viewer_sim = False
+    #     self.viewer.render()
 
     def robot_com(self):
         ''' Get the position of the robot center of mass in the simulator world reference frame '''
@@ -365,19 +397,19 @@ class World:
 
     def body_pos(self, name):
         ''' Get the position of a named body in the simulator world reference frame '''
-        return self.data.get_body_xpos(name).copy()
+        return self.data.body(name).xpos.copy()
 
     def body_mat(self, name):
         ''' Get the rotation matrix of a named body in the simulator world reference frame '''
-        return self.data.get_body_xmat(name).copy()
+        return self.data.body(name).xmat.copy().reshape(3,3)
 
     def body_vel(self, name):
         ''' Get the velocity of a named body in the simulator world reference frame '''
-        return self.data.get_body_xvelp(name).copy()
+        return self.data.body(name).xvel.copy()
     
     def body_size(self, name):
         ''' Get the size of a named body in the simulator world reference frame '''
-        return self.model.geom_size[self.model.geom_names.index(name)].copy()
+        return self.model.geom(name).size.copy()
 
 
 
@@ -385,18 +417,19 @@ class Robot:
     ''' Simple utility class for getting mujoco-specific info about a robot '''
     def __init__(self, path):
         base_path = os.path.join(BASE_DIR, path)
-        self.sim = MjSim(load_model_from_path(base_path))
-        self.sim.forward()
+        self.model = mujoco.MjModel.from_xml_path(base_path)
+        self.data = mujoco.MjData(self.model)
+        mujoco.mj_forward(self.model, self.data)
 
         # Needed to figure out z-height of free joint of offset body
-        self.z_height = self.sim.data.get_body_xpos('robot')[2]
+        self.z_height = self.data.body('robot').xpos[2]
         # Get a list of geoms in the robot
-        self.geom_names = [n for n in self.sim.model.geom_names if n != 'floor']
+        self.geom_names = [self.model.geom(i).name for i in range(self.model.ngeom) if self.model.geom(i).name != 'floor']
         # Needed to figure out the observation spaces
-        self.nq = self.sim.model.nq
-        self.nv = self.sim.model.nv
+        self.nq = self.model.nq
+        self.nv = self.model.nv
         # Needed to figure out action space
-        self.nu = self.sim.model.nu
+        self.nu = self.model.nu
         if "drone" in base_path:
             self.nu = 4
         # Needed to figure out observation space
@@ -406,27 +439,27 @@ class Robot:
         self.ballquat_names = []
         self.ballangvel_names = []
         self.sensor_dim = {}
-        for name in self.sim.model.sensor_names:
-            id = self.sim.model.sensor_name2id(name)
-            self.sensor_dim[name] = self.sim.model.sensor_dim[id]
-            sensor_type = self.sim.model.sensor_type[id]
-            if self.sim.model.sensor_objtype[id] == const.OBJ_JOINT:
-                joint_id = self.sim.model.sensor_objid[id]
-                joint_type = self.sim.model.jnt_type[joint_id]
-                if joint_type == const.JNT_HINGE:
-                    if sensor_type == const.SENS_JOINTPOS:
+        for id in range(self.model.nsensor):
+            name = self.model.sensor(id).name
+            self.sensor_dim[name] = self.model.sensor_dim[id]
+            sensor_type = self.model.sensor_type[id]
+            if self.model.sensor_objtype[id] == mujoco.mjtObj.mjOBJ_JOINT:
+                joint_id = self.model.sensor_objid[id]
+                joint_type = self.model.jnt_type[joint_id]
+                if joint_type == mujoco.mjtJoint.mjJNT_HINGE:
+                    if sensor_type == mujoco.mjtSensor.mjSENS_JOINTPOS:
                         self.hinge_pos_names.append(name)
-                    elif sensor_type == const.SENS_JOINTVEL:
+                    elif sensor_type == mujoco.mjtSensor.mjSENS_JOINTVEL:
                         self.hinge_vel_names.append(name)
                     else:
-                        t = self.sim.model.sensor_type[i]
+                        t = self.model.sensor_type[id]
                         raise ValueError('Unrecognized sensor type {} for joint'.format(t))
-                elif joint_type == const.JNT_BALL:
-                    if sensor_type == const.SENS_BALLQUAT:
+                elif joint_type == mujoco.mjtJoint.mjJNT_BALL:
+                    if sensor_type == mujoco.mjtSensor.mjSENS_BALLQUAT:
                         self.ballquat_names.append(name)
-                    elif sensor_type == const.SENS_BALLANGVEL:
+                    elif sensor_type == mujoco.mjtSensor.mjSENS_BALLANGVEL:
                         self.ballangvel_names.append(name)
-                elif joint_type == const.JNT_SLIDE:
+                elif joint_type == mujoco.mjtJoint.mjJNT_SLIDE:
                     # Adding slide joints is trivially easy in code,
                     # but this removes one of the good properties about our observations.
                     # (That we are invariant to relative whole-world transforms)

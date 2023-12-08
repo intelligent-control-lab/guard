@@ -14,7 +14,7 @@ from  safe_rl_envs.envs.engine import Engine as  safe_rl_envs_Engine
 from utils.safe_rl_env_config import configuration
 import os.path as osp
 
-device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 EPS = 1e-8
 
 class TRPOBuffer:
@@ -415,6 +415,7 @@ def trpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
+        epoch_t = time.time()
         for t in range(local_steps_per_epoch):
             a, v, logp, mu, logstd = ac.step(torch.as_tensor(o, dtype=torch.float32))
                     
@@ -422,6 +423,7 @@ def trpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 next_o, r, d, info = env.step(a)
                 assert 'cost' in info.keys()
             except: 
+                import ipdb;ipdb.set_trace()
                 # simulation exception discovered, discard this episode 
                 next_o, r, d = o, 0, True # observation will not change, no reward when episode done 
                 info['cost'] = 0 # no cost when episode done 
@@ -464,7 +466,7 @@ def trpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                     except:
                         print('reset environment is wrong, try next reset')
                 ep_cost = 0 # episode cost is zero 
-
+        print("collection time", time.time() - t)
         # Save model
         if ((epoch % save_freq == 0) or (epoch == epochs-1)) and model_save:
             logger.save_state({'env': env}, None)
