@@ -5,7 +5,7 @@ import torch
 from torch.optim import Adam
 import gym
 import time
-import alphappo_core as core
+import ppo_core as core
 from utils.logx import EpochLogger, setup_logger_kwargs
 from utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
@@ -16,9 +16,9 @@ import os.path as osp
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-class AlphaPPOBuffer:
+class PPOBuffer:
     """
-    A buffer for storing trajectories experienced by a AlphaPPO agent interacting
+    A buffer for storing trajectories experienced by a PPO agent interacting
     with the environment, and using Generalized Advantage Estimation (GAE-Lambda)
     for calculating the advantages of state-action pairs.
     """
@@ -31,12 +31,10 @@ class AlphaPPOBuffer:
         self.ret_buf = np.zeros(size, dtype=np.float32)
         self.val_buf = np.zeros(size, dtype=np.float32)
         self.logp_buf = np.zeros(size, dtype=np.float32)
-        self.mu_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
-        self.logstd_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
         self.gamma, self.lam = gamma, lam
         self.ptr, self.path_start_idx, self.max_size = 0, 0, size
 
-    def store(self, obs, act, rew, val, logp, mu, logstd):
+    def store(self, obs, act, rew, val, logp):
         """
         Append one timestep of agent-environment interaction to the buffer.
         """
@@ -46,8 +44,6 @@ class AlphaPPOBuffer:
         self.rew_buf[self.ptr] = rew
         self.val_buf[self.ptr] = val
         self.logp_buf[self.ptr] = logp
-        self.mu_buf[self.ptr] = mu
-        self.logstd_buf[self.ptr] = logstd
         self.ptr += 1
 
     def finish_path(self, last_val=0):
@@ -96,20 +92,18 @@ class AlphaPPOBuffer:
                     act=torch.FloatTensor(self.act_buf).to(device), 
                     ret=torch.FloatTensor(self.ret_buf).to(device),
                     adv=torch.FloatTensor(self.adv_buf).to(device), 
-                    logp=torch.FloatTensor(self.logp_buf).to(device),
-                    mu=torch.FloatTensor(self.mu_buf).to(device),
-                    logstd=torch.FloatTensor(self.logstd_buf).to(device))
+                    logp=torch.FloatTensor(self.logp_buf).to(device))
         return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in data.items()}
 
 
 
-def alphappo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
+def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
         vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=1000,
         target_kl=0.01, logger_kwargs=dict(), save_freq=10, model_save=False,
-        atari=None, beta=1.0, alpha=1.0):
+        mujoco=None):
     """
-    Alpha Proximal Policy Optimization 
+    Proximal Policy Optimization (by clipping), 
 
     with early stopping based on approximate KL
 
@@ -165,7 +159,7 @@ def alphappo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
 
         ac_kwargs (dict): Any kwargs appropriate for the ActorCritic object 
-            you provided to AlphaPPO.
+            you provided to PPO.
 
         seed (int): Seed for random number generators.
 
@@ -208,12 +202,11 @@ def alphappo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
         save_freq (int): How often (in terms of gap between epochs) to save
             the current policy and value function.
-        
-        atari (str): name of atari game (None if running continuous game).
+
     """
-    def atari_env_fn(atari_name, version='5'):
-        env_name = 'ALE/' + atari_name + '-v' + version
-        return gymnasium.make(env_name, obs_type="ram")
+    def mujoco_env_fn(mujoco_name, version='5'):
+        env_name = mujoco_name + '-v4'
+        return gymnasium.make(env_name)
 
     # Special function to avoid certain slowdowns from PyTorch + MPI combo.
     setup_pytorch_for_mpi()
@@ -228,10 +221,7 @@ def alphappo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     np.random.seed(seed)
 
     # Instantiate environment
-    if atari == None:
-        env = env_fn()
-    else:
-        env = atari_env_fn(atari)
+    env = mujoco_env_fn(mujoco)
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape
 
@@ -247,35 +237,24 @@ def alphappo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     # Set up experience buffer
     local_steps_per_epoch = int(steps_per_epoch / num_procs())
-    buf = AlphaPPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
-    
-    # Set up function for computing AlphaPPO policy loss
-    def compute_kl_pi(data, cur_pi):
-        """
-        Return the sample average KL divergence between old and new policies
-        """
-        obs = data['obs']
-        mu_old, logstd_old =  data['mu'], data['logstd']
-        average_kl = cur_pi._d_kl(
-            torch.as_tensor(obs, dtype=torch.float32),
-            torch.as_tensor(mu_old, dtype=torch.float32),
-            torch.as_tensor(logstd_old, dtype=torch.float32), device=device, alpha=alpha)
+    buf = PPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
 
-        return average_kl
-    
+    # Set up function for computing PPO policy loss
     def compute_loss_pi(data):
         obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
 
         # Policy loss
         pi, logp = ac.pi(obs, act)
-        ratio = torch.exp(logp - logp_old)
-        kl = compute_kl_pi(data, ac.pi)
-        loss_pi = -(1-beta)*(ratio * adv).mean() + beta*kl
+        ratio = torch.exp(logp - logp_old) # note that log a - log b = log (a/b), then exp(log(a/b)) = a / b
+        clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
+        loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
 
         # Useful extra info
         approx_kl = (logp_old - logp).mean().item()
         ent = pi.entropy().mean().item()
-        pi_info = dict(kl=approx_kl, ent=ent)
+        clipped = ratio.gt(1+clip_ratio) | ratio.lt(1-clip_ratio)
+        clipfrac = torch.as_tensor(clipped, dtype=torch.float32).mean().item()
+        pi_info = dict(kl=approx_kl, ent=ent, cf=clipfrac)
 
         return loss_pi, pi_info
 
@@ -322,25 +301,15 @@ def alphappo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             vf_optimizer.step()
 
         # Log changes from update
-        kl, ent= pi_info['kl'], pi_info_old['ent']
+        kl, ent, cf = pi_info['kl'], pi_info_old['ent'], pi_info['cf']
         logger.store(LossPi=pi_l_old, LossV=v_l_old,
-                     KL=kl, Entropy=ent,
+                     KL=kl, Entropy=ent, ClipFrac=cf,
                      DeltaLossPi=(loss_pi.item() - pi_l_old),
                      DeltaLossV=(loss_v.item() - v_l_old))
-        
-        precise_kl = compute_kl_pi(data, ac.pi).item()
-        logger.store(PreciseKL=precise_kl)
-        if precise_kl >= target_kl:
-            return True
-        else:
-            return False
 
     # Prepare for interaction with environment
     start_time = time.time()
-    if atari == None:
-        o, ep_ret, ep_len = env.reset(), 0, 0
-    else:
-        o, ep_ret, ep_len = env.reset(seed=seed), 0, 0
+    o, ep_ret, ep_len = env.reset(seed=seed), 0, 0
 
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
@@ -348,14 +317,11 @@ def alphappo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             if isinstance(o, tuple):
                 o = o[0]
             # a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
-            a, v, logp, mu, logstd = ac.step(torch.as_tensor(o, dtype=torch.float32))
+            a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
 
             try:
-                if atari == None:
-                    next_o, r, d, info = env.step(a)
-                else:
-                    next_o, r, d_1, d_2, info = env.step(a)
-                    d = d_1 or d_2
+                next_o, r, d_1, d_2, info = env.step(a)
+                d = d_1 or d_2
             except:
                 print('the enviornment is wrong, skipping episode')
                 next_o, r, d = None, 0, True
@@ -365,14 +331,14 @@ def alphappo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             # save and log
             if isinstance(o, tuple):
                 o = o[0]
-            buf.store(o, a, r, v, logp, mu, logstd)
+            buf.store(o, a, r, v, logp)
             logger.store(VVals=v)
             
             # Update obs (critical!)
             o = next_o
 
-            atari_mode = atari != None
-            timeout = (ep_len == max_ep_len) and (not atari_mode)
+            mujoco_mode = mujoco != None
+            timeout = (ep_len == max_ep_len) and (not mujoco_mode)
             terminal = d or timeout
             epoch_ended = t==local_steps_per_epoch-1
 
@@ -383,36 +349,26 @@ def alphappo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 if timeout or epoch_ended:
                     if isinstance(o, tuple):
                         o = o[0]
-                    _, v, _, _, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
+                    _, v, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
                 else:
                     v = 0
                 buf.finish_path(v)
                 if terminal:
                     # only save EpRet / EpLen if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
-                if atari == None:
-                    o, ep_ret, ep_len = env.reset(), 0, 0
-                else:
-                    o, ep_ret, ep_len = env.reset(seed=seed), 0, 0
+                o, ep_ret, ep_len = env.reset(seed=seed), 0, 0
 
 
         # Save model
         if ((epoch % save_freq == 0) or (epoch == epochs-1)) and model_save:
             logger.save_state({'env': env}, None)
 
-        logger.store(Beta=beta)
-        # Perform AlphaPPO update!
-        flag = update()
-        if flag:
-            beta = 2.0 * beta
-        else:
-            beta = 0.5 * beta
+        # Perform PPO update!
+        update()
 
         # Log info about epoch
         logger.log_tabular('Epoch', epoch)
         logger.log_tabular('EpRet', with_min_and_max=True)
-        logger.log_tabular('PreciseKL', average_only=True)
-        logger.log_tabular('Beta', average_only=True)
         logger.log_tabular('EpLen', average_only=True)
         logger.log_tabular('VVals', with_min_and_max=True)
         logger.log_tabular('TotalEnvInteracts', (epoch+1)*steps_per_epoch)
@@ -422,6 +378,7 @@ def alphappo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         logger.log_tabular('DeltaLossV', average_only=True)
         logger.log_tabular('Entropy', average_only=True)
         logger.log_tabular('KL', average_only=True)
+        logger.log_tabular('ClipFrac', average_only=True)
         logger.log_tabular('StopIter', average_only=True)
         logger.log_tabular('Time', time.time()-start_time)
         logger.dump_tabular()
@@ -433,48 +390,37 @@ def create_env(args):
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()    
-    parser.add_argument('--task', type=str, default='Goal_Point_8Hazards')
+    parser.add_argument('--task', type=str, default='Mygoal4')
     parser.add_argument('--hazards_size', type=float, default=0.30)  # the default hazard size of safety gym 
     parser.add_argument('--hid', type=int, default=64)
     parser.add_argument('--l', type=int, default=2)
     parser.add_argument('--gamma', type=float, default=0.99)
-    parser.add_argument('--beta', type=float, default=0.5)
-    parser.add_argument('--alpha', type=float, default=0.5)
     parser.add_argument('--target_kl', type=float, default=0.02)
     parser.add_argument('--seed', '-s', type=int, default=0)
     parser.add_argument('--cpu', type=int, default=1)
     parser.add_argument('--steps', type=int, default=30000)
     parser.add_argument('--epochs', type=int, default=200)
-    parser.add_argument('--exp_name', type=str, default='alphappo')
+    parser.add_argument('--exp_name', type=str, default='ppo')
     parser.add_argument('--model_save', action='store_true')
-    parser.add_argument('--atari_name', '-a', type=str, default=None, 
-                        choices=['Adventure', 'Pong', 'Seaquest', 'Riverraid', 'Freeway', 'BeamRider', 'Gopher', 'SpaceInvaders',
-                                 'AirRaid', 'Assault', 'Qbert', 'Skiing', 'Enduro', 'Breakout', 'Bowling', 'IceHockey', 'KungFuMaster',
-                                 'TimePilot', 'Boxing', 'JourneyEscape', 'CrazyClimber', 'Frostbite',
-                                 'Asteroids', 'Solaris', 'Zaxxon', 'BattleZone', 'Centipede', 'DemonAttack',
-                                 'StarGunner', 'VideoPinball', 'Venture', 'UpNDown', 'Robotank',
-                                 'Atlantis', 'Carnival', 'Defender', 'ElevatorAction', 'Hero',
-                                 'Pitfall', 'Amidar', 'FishingDerby', 'MsPacman',
-                                 'Alien', 'Asterix', 'BankHeist', 'Berzerk', 'ChopperCommand',
-                                 'DoubleDunk', 'Gravitar', 'Jamesbond', 'Kangaroo', 'NameThisGame',
-                                 'Krull', 'MontezumaRevenge', 'Phoenix', 'Pooyan', 'PrivateEye', 'RoadRunner',
-                                 'Tennis', 'Tutankham', 'WizardOfWor', 'YarsRevenge'])
+    parser.add_argument('--mujoco_name', '-m', type=str,
+                        choices=['Ant', 'Hopper', 'Humanoid', 'HalfCheetah', 'HumanoidStandup', 'InvertedDoublePendulum', 
+                                 'InvertedPendulum', 'Reacher', 'Swimmer', 'Walker2d'])    
     args = parser.parse_args()
 
     mpi_fork(args.cpu)  # run parallel code with mpi
     
-    if args.atari_name == None:
-        exp_name = args.task + '_' + args.exp_name + f'_alpha{args.alpha}_beta{args.beta}' + '_' + 'kl' + str(args.target_kl) + '_' + 'epochs' + str(args.epochs)
+    if args.mujoco_name == None:
+        exp_name = args.task + '_' + args.exp_name + '_' + 'kl' + str(args.target_kl) + '_' + 'epochs' + str(args.epochs)
     else:
         import gymnasium
-        exp_name = args.atari_name + '_' + args.exp_name + '_' + 'kl' + str(args.target_kl) + '_' + 'epochs' + str(args.epochs)
+        exp_name = args.mujoco_name + '_' + args.exp_name + '_' + 'kl' + str(args.target_kl) + '_' + 'epochs' + str(args.epochs)
     logger_kwargs = setup_logger_kwargs(exp_name, args.seed)
     
     # whether to save model
     model_save = True if args.model_save else False
 
-    alphappo(lambda : create_env(args), actor_critic=core.MLPActorCritic,
+    ppo(lambda : create_env(args), actor_critic=core.MLPActorCritic,
         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma, 
         seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
         logger_kwargs=logger_kwargs, target_kl=args.target_kl, model_save=model_save,
-        atari=args.atari_name, beta=args.beta, alpha=args.alpha)
+        mujoco=args.mujoco_name)

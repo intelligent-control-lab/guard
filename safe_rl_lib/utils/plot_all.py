@@ -12,7 +12,7 @@ DIV_LINE_WIDTH = 50
 exp_idx = 0
 units = dict()
 
-def plot_data(data, xaxis='Epoch', value="AverageEpRet", condition="Condition1", smooth=1, **kwargs):
+def plot_data(data, title="", xaxis='Epoch', value="AverageEpRet", condition="Condition1", smooth=1, **kwargs):
     if smooth > 1:
         """
         smooth data with moving window average.
@@ -30,7 +30,10 @@ def plot_data(data, xaxis='Epoch', value="AverageEpRet", condition="Condition1",
     if isinstance(data, list):
         data = pd.concat(data, ignore_index=True)
     sns.set(style="darkgrid", font_scale=1.5, palette='colorblind')
-    sns.tsplot(data=data, time=xaxis, value=value, unit="Unit", condition=condition, ci='sd', **kwargs)
+    # import ipdb; ipdb.set_trace()
+    plt.figure(figsize=(8,6))
+    #sns.tsplot(data=data, time=xaxis, value=value, unit="Unit", condition=condition, ci='sd', **kwargs)
+    ax = sns.lineplot(data=data, x=xaxis, y=value, hue=condition, errorbar='sd', lw=2, **kwargs)
     """
     If you upgrade to any version of Seaborn greater than 0.8.1, switch from 
     tsplot to lineplot replacing L29 with:
@@ -39,9 +42,31 @@ def plot_data(data, xaxis='Epoch', value="AverageEpRet", condition="Condition1",
 
     Changes the colorscheme and the default legend style, though.
     """
-    plt.legend(loc='best').set_draggable(True)
-    #plt.legend(loc='upper center', ncol=3, handlelength=1,
-    #           borderaxespad=0., prop={'size': 13})
+    #plt.legend(loc='best').set_draggable(True)
+    plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
+    plt.title(title[:-1].split('/')[-1], fontsize=34)
+    plt.legend(loc='upper center', ncol=4, handlelength=1,
+              borderaxespad=0., prop={'size': 16}, frameon=False)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set(xlabel=None, ylabel=None)
+
+    # if title.split('/')[-2] == "Push_Walker" and value == "Reward_Performance":
+    #     plt.ylim(-2.0, 10.5)
+    # elif title.split('/')[-2] == "Push_Walker" and value == "MinEpRet":
+    #     plt.ylim(-11.0, 2.0)
+    # elif title.split('/')[-2] == "Push_Point" and value == "Reward_Performance":
+    #     plt.ylim(-2.0, 12.0)
+    # elif title.split('/')[-2] == "Push_Point" and value == "MinEpRet":
+    #     plt.ylim(-10.0, 10.0)
+    # elif title.split('/')[-2] == "Chase_Walker" and value == "Reward_Performance":
+    #     plt.ylim(-2.5, 1.5)
+    # elif title.split('/')[-2] == "Chase_Walker" and value == "MinEpRet":
+    #     plt.ylim(-10.0, 1.0)
+    
+    if title[:-1].split('/')[-1] == "MontezumaRevenge":
+        plt.xlim(0, 1.343e7)
+        plt.ylim(0, 100)
 
     """
     For the version of the legend used in the Spinning Up benchmarking page, 
@@ -67,15 +92,56 @@ def get_datasets(logdir, condition=None):
     """
     global exp_idx
     global units
+    
+    def sort_key(element):
+        if "alphappo" in element[0]:
+            return int(5)
+        elif "appo" in element[0] or "papo" in element[0]:
+            return int(4)
+        elif "vctrpo" in element[0]:
+            return int(0)
+        elif "trpo" in element[0]:
+            return int(1)
+        elif "espo" in element[0]:
+            return int(6)
+        elif "ppo" in element[0]:
+            return int(2)
+        elif "vpg" in element[0] or "a2c" in element[0]:
+            return int(3)
+        elif "vmpo" in element[0]:
+            return int(7)
+        else: 
+            return int(8)        
+    
     datasets = []
-    for root, _, files in os.walk(logdir):
+    dirs = [(root, files) for root, _, files in os.walk(logdir)][1:]
+    dirs = sorted(dirs, key=sort_key)
+    for root, files in dirs:
         if 'progress.txt' in files:
             exp_name = None
             try:
                 config_path = open(os.path.join(root,'config.json'))
                 config = json.load(config_path)
                 if 'exp_name' in config:
-                    exp_name = config['exp_name']
+                    if "vctrpo" in config['exp_name']:
+                        exp_name = "APO"
+                    elif "trpo" in config['exp_name']:
+                        exp_name = "TRPO"
+                    elif "alpha" in config['exp_name']:
+                        exp_name = "Alpha-PPO"
+                    elif "appo" in config['exp_name'] or "papo" in config['exp_name']:
+                        exp_name = "PAPO"
+                    elif "espo" in config['exp_name']:
+                        exp_name = "ESPO"
+                    elif "ppo" in config['exp_name']:
+                        exp_name = "PPO"
+                    elif "vpg" in config['exp_name'] or "a2c" in config['exp_name']:
+                        exp_name = "A2C"
+                    elif "vmpo" in config['exp_name']:
+                        exp_name = "V-MPO"
+                    else:
+                        exp_name = "Unkonw"
+                    
             except:
                 print('No file named config.json')
             condition1 = condition or exp_name or 'exp'
@@ -126,7 +192,6 @@ def get_all_datasets(all_logdirs, legend=None, select=None, exclude=None):
             prefix = logdir.split(os.sep)[-1]
             listdir= os.listdir(basedir)
             logdirs += sorted([fulldir(x) for x in listdir if prefix in x])
-
     """
     Enforce selection rules, which check logdirs for certain substrings.
     Makes it easier to look at graphs from particular ablations, if you
@@ -136,7 +201,7 @@ def get_all_datasets(all_logdirs, legend=None, select=None, exclude=None):
         logdirs = [log for log in logdirs if all(x in log for x in select)]
     if exclude is not None:
         logdirs = [log for log in logdirs if all(not(x in log) for x in exclude)]
-
+   
     # Verify logdirs
     print('Plotting from...\n' + '='*DIV_LINE_WIDTH + '\n')
     for logdir in logdirs:
@@ -164,7 +229,7 @@ def make_plots(all_logdirs, legend=None, xaxis=None, values=[], count=False,
     # results_dir = osp.join(results_dir, title)
     data = get_all_datasets(all_logdirs, legend, select, exclude)
     # values = values if isinstance(values, list) else [values]
-
+    # values = []
     if reward_flag:
         values.append('Reward_Performance')
     if cost_flag:
@@ -176,14 +241,18 @@ def make_plots(all_logdirs, legend=None, xaxis=None, values=[], count=False,
     for value in values:
         subdir = title + '/'
         plt.figure()
-        plot_data(data, xaxis=xaxis, value=value, condition=condition, smooth=smooth, estimator=estimator)
+        # try:
+        plot_data(data, title=all_logdirs[0], xaxis=xaxis, value=value, condition=condition, smooth=smooth, estimator=estimator)
+        # except:
+        #     print(f"this key {value} is not in the data")
+        #     break
         # make direction for save figure
         final_dir = osp.join(results_dir, subdir)
         existence = os.path.exists(final_dir)
         if not existence:
             os.makedirs(final_dir)
         plt.show()
-        plt.savefig(final_dir + value, dpi=400, bbox_inches='tight')
+        plt.savefig(final_dir + f"{final_dir.split('/')[-2]}_{value}", dpi=100, bbox_inches='tight')
 
 
 def main():

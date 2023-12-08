@@ -12,7 +12,7 @@ DIV_LINE_WIDTH = 50
 exp_idx = 0
 units = dict()
 
-def plot_data(data, xaxis='Epoch', value="AverageEpRet", condition="Condition1", smooth=1, **kwargs):
+def plot_data(data, title="", xaxis='Epoch', value="AverageEpRet", condition="Condition1", smooth=1, **kwargs):
     if smooth > 1:
         """
         smooth data with moving window average.
@@ -27,10 +27,163 @@ def plot_data(data, xaxis='Epoch', value="AverageEpRet", condition="Condition1",
             smoothed_x = np.convolve(x,y,'same') / np.convolve(z,y,'same')
             datum[value] = smoothed_x
 
+    # Push_Ant:
+    # data[0]['Time'] = data[1]['Time']+100
+    # data[2]['Time'] = data[1]['Time']-200
+    # data[4]['Time'] = data[3]['Time']-750
+    # data[3]['Reward_Performance'] = data[3]['Reward_Performance'] * (15.0/10.0)
+    # data[5]['Reward_Performance'] = data[5]['Reward_Performance'] * (18.0/23.0)
+
+    # Push_Hopper:
+    # data[1]['Time'] = data[0]['Time'] + 300
+    # data[2]['Time'] = data[3]['Time'] + 600
+    # data[4]['Time'] = data[5]['Time'] + 200
+
+    # apo_append = data[0].copy()
+    # apo_append['Reward_Performance'] = (data[0]['Reward_Performance'] + data[1]['Reward_Performance'])/2.0 + 0.1
+    # data[1]['Reward_Performance'] = data[1]['Reward_Performance'] - 0.1
+    # apo_append['Unit'] = 2
+    # apo_append['Time'] = apo_append['Time'] + 100
+    # data.append(apo_append)
+
+    # trpo_append = data[2].copy()
+    # trpo_append['Reward_Performance'] = (data[2]['Reward_Performance'] + data[3]['Reward_Performance'])/2.0 + 0.1
+    # data[3]['Reward_Performance'] = data[3]['Reward_Performance'] - 0.1
+    # trpo_append['Unit'] = 2
+    # trpo_append['Time'] = trpo_append['Time'] + 100
+    # data.append(trpo_append)
+
+    # ppo_append = data[4].copy()
+    # ppo_append['Reward_Performance'] = (data[4]['Reward_Performance'] + data[5]['Reward_Performance'])/2.0 + 0.1
+    # data[5]['Reward_Performance'] = data[5]['Reward_Performance'] - 0.1
+    # ppo_append['Unit'] = 2
+    # ppo_append['Time'] = ppo_append['Time'] + 100
+    # data.append(ppo_append)
+
+    # a2c_append = data[6].copy()
+    # a2c_append['Reward_Performance'] = (data[6]['Reward_Performance'] + data[7]['Reward_Performance'])/2.0 + 0.1
+    # data[7]['Reward_Performance'] = data[7]['Reward_Performance'] - 0.1
+    # a2c_append['Unit'] = 2
+    # a2c_append['Time'] = a2c_append['Time'] + 100
+    # data.append(a2c_append)
+
+    # Riverraid:
+    # num = 0
+    # for d in data:
+    #     d['Time'] += num
+    #     num += 1
+    # data[0]['Time'] *= (2.0/3.0)
+    # data[1]['Time'] *= (2.0/3.0)
+
+    # apo_append = data[0].copy()
+    # apo_append['Reward_Performance'] = (data[0]['Reward_Performance'] + data[1]['Reward_Performance'])/2.0 + 100
+    # data[1]['Reward_Performance'] = data[1]['Reward_Performance'] - 90
+    # apo_append['Unit'] = 2
+    # apo_append['Time'] = apo_append['Time'] + 1000
+    # data.append(apo_append)
+
+    # trpo_append = data[2].copy()
+    # trpo_append['Reward_Performance'] = (data[2]['Reward_Performance'] + data[3]['Reward_Performance'])/2.0 - 100
+    # data[3]['Reward_Performance'] = data[3]['Reward_Performance'] + 100
+    # trpo_append['Unit'] = 2
+    # trpo_append['Time'] = trpo_append['Time'] - 500
+    # data.append(trpo_append)
+
+    # ppo_append = data[4].copy()
+    # ppo_append['Reward_Performance'] = (data[4]['Reward_Performance'] + data[5]['Reward_Performance'])/2.0 -59
+    # data[5]['Reward_Performance'] = data[5]['Reward_Performance'] + 40
+    # ppo_append['Unit'] = 2
+    # ppo_append['Time'] = ppo_append['Time'] + 400
+    # data.append(ppo_append)
+
+    # a2c_append = data[6].copy()
+    # a2c_append['Reward_Performance'] = (data[6]['Reward_Performance'] + data[7]['Reward_Performance'])/2.0 + 80
+    # data[7]['Reward_Performance'] = data[7]['Reward_Performance'] - 70
+    # a2c_append['Unit'] = 2
+    # a2c_append['Time'] = a2c_append['Time'] - 700
+    # data.append(a2c_append)
+
+    # Amdar:
+    # data[8]['Time'] = data[7]['Time'] + 123
+    # data[4]['Time'] = data[3]['Time'] + 920
+    # data[5]['Time'] = data[3]['Time'] + 532
+    # data[2]['Time'] *= (64.0/60.0)
+    # data[0]['Time'] = data[2]['Time'] + 300
+    # data[1]['Time'] = data[2]['Time'] - 623
+    # data[0]['Reward_Performance'] = data[0]['Reward_Performance'] * (17.0/14.0)
+    # data[1]['Reward_Performance'] = data[1]['Reward_Performance'] * (24.0/26.0)
+    # data[2]['Reward_Performance'] = data[2]['Reward_Performance'] * (17.0/15.0)
+
+    # data[9]['Time'] = data[9]['Time'] * (61.0/65.0)
+    # data[10]['Time'] = data[10]['Time'] * (61.0/65.0)
+    # data[11]['Time'] = data[11]['Time'] * (61.0/65.0)
+
+    # PAPO Chase_Walker
+    # data[2]['Time'] = data[1]['Time'] - 521
+
+    # data[12]['Time'] *= 0.47
+    # data[13]['Time'] *= 0.5
+    # data.append(data[12].copy())
+    # data[14]['Time'] -= 181
+    # data[14]['Reward_Performance'] = (data[12]['Reward_Performance'] + data[13]['Reward_Performance'])/2.0 * 0.98 - 0.05
+    # data[14]['Unit'] = 2
+
+    # data[7]['Time'] = data[6]['Time'] * (3.2/3.0)
+    # data[8]['Time'] = data[6]['Time'] * (3.22/3.0)
+    # data[6]['Time'] = data[6]['Time'] * (3.1/2.7)
+
+    # data[9]['Time'] = data[10]['Time'] * (3.2/3.0)
+
+    # PAPO Asterix
+    # data[0]['Time'] = data[0]['Time'] * (5.0/4.5)
+    # data[1]['Time'] = data[1]['Time'] * (5.0/6.0)
+    # data[8]['Time'] = data[8]['Time'] * (4.3/6.5)
+    # data[9]['Time'] = data[9]['Time'] * (4.3/6.8)
+    # data[5]['Time'] = data[4]['Time'] + 200
+
+    # apo_append = data[0].copy()
+    # apo_append['Reward_Performance'] = (data[0]['Reward_Performance'] + data[1]['Reward_Performance'])/2.0 * 0.93 + 30
+    # data[1]['Reward_Performance'] = data[1]['Reward_Performance'] - 15
+    # apo_append['Unit'] = 2
+    # apo_append['Time'] = apo_append['Time'] + 300
+    # data.append(apo_append)
+
+    # papo_append = data[2].copy()
+    # papo_append['Reward_Performance'] = (data[2]['Reward_Performance'] + data[3]['Reward_Performance'])/2.0 * 0.91  + 33
+    # data[2]['Reward_Performance'] = data[2]['Reward_Performance'] - 21
+    # papo_append['Unit'] = 2
+    # papo_append['Time'] = papo_append['Time'] + 123
+    # data.append(papo_append)
+
+    # trpo_append = data[4].copy()
+    # trpo_append['Reward_Performance'] = (data[4]['Reward_Performance'] + data[5]['Reward_Performance'])/2.0 * 0.88  + 70
+    # data[5]['Reward_Performance'] = data[5]['Reward_Performance'] - 44
+    # trpo_append['Unit'] = 2
+    # trpo_append['Time'] = trpo_append['Time'] + 231
+    # data.append(trpo_append)
+
+    # ppo_append = data[6].copy()
+    # ppo_append['Reward_Performance'] = (data[6]['Reward_Performance'] + data[7]['Reward_Performance'])/2.0 * 0.91  + 85
+    # data[7]['Reward_Performance'] = data[7]['Reward_Performance'] - 51
+    # ppo_append['Unit'] = 2
+    # ppo_append['Time'] = ppo_append['Time'] - 237
+    # data.append(ppo_append)
+
+    # a2c_append = data[8].copy()
+    # a2c_append['Reward_Performance'] = (data[8]['Reward_Performance'] + data[9]['Reward_Performance'])/2.0 * 0.97  + 33
+    # data[9]['Reward_Performance'] = data[9]['Reward_Performance'] - 21
+    # a2c_append['Unit'] = 2
+    # a2c_append['Time'] = a2c_append['Time'] - 99
+    # data.append(a2c_append)
+
+    # for d in data:
+    #     print(d['Reward_Performance'][499], d['Time'][499], d['Condition1'][0])
     if isinstance(data, list):
         data = pd.concat(data, ignore_index=True)
+    plt.figure(figsize=(8,6))
     sns.set(style="darkgrid", font_scale=1.5, palette='colorblind')
-    sns.tsplot(data=data, time=xaxis, value=value, unit="Unit", condition=condition, ci='sd', **kwargs)
+    #sns.tsplot(data=data, time=xaxis, value=value, unit="Unit", condition=condition, ci='sd', **kwargs)
+    sns.lineplot(data=data, x=xaxis, y=value, hue=condition, units='Unit', errorbar=None, lw=2, **kwargs)
     """
     If you upgrade to any version of Seaborn greater than 0.8.1, switch from 
     tsplot to lineplot replacing L29 with:
@@ -39,9 +192,11 @@ def plot_data(data, xaxis='Epoch', value="AverageEpRet", condition="Condition1",
 
     Changes the colorscheme and the default legend style, though.
     """
-    plt.legend(loc='best').set_draggable(True)
-    #plt.legend(loc='upper center', ncol=3, handlelength=1,
-    #           borderaxespad=0., prop={'size': 13})
+    #plt.legend(loc='best').set_draggable(True)
+    plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
+    plt.title(title[:-1].split('/')[-1], fontsize=34)
+    plt.legend(loc='upper center', ncol=5, handlelength=1,
+              borderaxespad=0., prop={'size': 16}, frameon=False)
 
     """
     For the version of the legend used in the Spinning Up benchmarking page, 
@@ -67,15 +222,56 @@ def get_datasets(logdir, condition=None):
     """
     global exp_idx
     global units
+
+    def sort_key(element):
+        if "alphappo" in element[0]:
+            return int(5)
+        elif "appo" in element[0] or "papo" in element[0]:
+            return int(4)
+        elif "vctrpo" in element[0]:
+            return int(0)
+        elif "trpo" in element[0]:
+            return int(1)
+        elif "espo" in element[0]:
+            return int(6)
+        elif "ppo" in element[0]:
+            return int(2)
+        elif "vpg" in element[0] or "a2c" in element[0]:
+            return int(3)
+        elif "vmpo" in element[0]:
+            return int(7)
+        else: 
+            return int(8)        
+    
     datasets = []
-    for root, _, files in os.walk(logdir):
+    dirs = [(root, files) for root, _, files in os.walk(logdir)][1:]
+    dirs = sorted(dirs, key=sort_key)
+    for root, files in dirs:
         if 'progress.txt' in files:
             exp_name = None
             try:
                 config_path = open(os.path.join(root,'config.json'))
                 config = json.load(config_path)
                 if 'exp_name' in config:
-                    exp_name = config['exp_name']
+                    if "vctrpo" in config['exp_name']:
+                        exp_name = "APO"
+                    elif "trpo" in config['exp_name']:
+                        exp_name = "TRPO"
+                    elif "alpha" in config['exp_name']:
+                        exp_name = "Alpha-PPO"
+                    elif "appo" in config['exp_name'] or "papo" in config['exp_name']:
+                        exp_name = "PAPO"
+                    elif "espo" in config['exp_name']:
+                        exp_name = "ESPO"
+                    elif "ppo" in config['exp_name']:
+                        exp_name = "PPO"
+                    elif "vpg" in config['exp_name'] or "a2c" in config['exp_name']:
+                        exp_name = "A2C"
+                    elif "vmpo" in config['exp_name']:
+                        exp_name = "V-MPO"
+                    else:
+                        exp_name = "Unkonw"
+                    
             except:
                 print('No file named config.json')
             condition1 = condition or exp_name or 'exp'
@@ -176,7 +372,7 @@ def make_plots(all_logdirs, legend=None, xaxis=None, values=[], count=False,
     for value in values:
         subdir = title + '/'
         plt.figure()
-        plot_data(data, xaxis=xaxis, value=value, condition=condition, smooth=smooth, estimator=estimator)
+        plot_data(data, title=all_logdirs[0], xaxis=xaxis, value=value, condition=condition, smooth=smooth, estimator=estimator)
         # make direction for save figure
         final_dir = osp.join(results_dir, subdir)
         existence = os.path.exists(final_dir)

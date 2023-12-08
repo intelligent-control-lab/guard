@@ -44,11 +44,11 @@ def run(python_files_and_args, available_devices):
         
         try:
             processes.append(subprocess.Popen(f"CUDA_VISIBLE_DEVICES={devices} python {file_path} {arguments}", shell=True, 
-                                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=False))
             print(f"Task {index} successfully executed on cuda:{best_gpu} with params [{file_path} {arguments}]")
         except Exception as e:
             print(f"Error when starting process {index}: {str(e)}")
-        time.sleep(10)
+        #time.sleep(10)
     
     print("----------------------------")
 
@@ -72,69 +72,70 @@ def run(python_files_and_args, available_devices):
 if __name__ == "__main__":
     python_files_and_args = []
     
-    for task in ['Goal_Hopper']:
-        for seed in [0,6]:
-            python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
-    for task in ['Goal_Point']:
-        for seed in [0,5]:
-            python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
-    for task in ['Goal_Swimmer']:
-        for seed in [0,1,2]:
-            python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
-    for task in ['Goal_Drone']:
-        for seed in [0,1]:
-            python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
-    for task in ['Goal_Arm3']:
-        for seed in [0,4,6]:
-            python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
+    # for task in ['Goal_Hopper']:
+    #     for seed in [0,6]:
+    #         python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
+    # for task in ['Goal_Point']:
+    #     for seed in [0,5]:
+    #         python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
+    # for task in ['Goal_Swimmer']:
+    #     for seed in [0,1,2]:
+    #         python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
+    # for task in ['Goal_Drone']:
+    #     for seed in [0,1]:
+    #         python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
+    # for task in ['Goal_Arm3']:
+    #     for seed in [0,4,6]:
+    #         python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
            
-    for task in ['Push_Hopper']:
-        for seed in [0,1]:
-            python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
-    for task in ['Push_Point']:
-        for seed in [0,1,2]:
-            python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
-    for task in ['Push_Swimmer']:
-        for seed in [0,1,2]:
-            python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
-    for task in ['Push_Ant']:
-        for seed in [0,1,2]:
-            python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
-    for task in ['Push_Walker']:
-        for seed in [0,3]:
-            python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))     
-    
-    for task in ['Chase_Ant']:
-        for seed in [0,1]:
-            python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed} --epochs 100 --steps 60000"))
-    for task in ['Chase_Walker']:
-        for seed in [0,1,2]:
-            python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))  
+    # for task in ['Push_Hopper']:
+    #     for seed in [0,1]:
+    #         python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
+    # for task in ['Push_Point']:
+    #     for seed in [0,1,2]:
+    #         python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
+    # for task in ['Push_Swimmer']:
+    #     for seed in [0,1,2]:
+    #         python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
+    # for task in ['Push_Ant']:
+    #     for seed in [0,1,2]:
+    #         python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))
+    # for task in ['Push_Walker']:
+    #     for seed in [0,3]:
+    #         python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))     
     
     # for task in ['Chase_Ant']:
-    #     for alpha in [0.1, 0.3, 0.7, 0.9]:
-    #         python_files_and_args.append(("alphappo/alphappo.py", f"--task {task}_0Hazards --alpha {alpha} --seed 0 --epochs 100 --steps 60000"))
+    #     for seed in [0,1]:
+    #         python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed} --epochs 100 --steps 60000"))
     # for task in ['Chase_Walker']:
-    #     for alpha in [0.1, 0.3, 0.7, 0.9]:
-    #         python_files_and_args.append(("alphappo/alphappo.py", f"--task {task}_0Hazards --alpha {alpha} --seed 0"))
-    # for task in ['Goal_Drone']:
-    #     for alpha in [0.1, 0.3, 0.7, 0.9]:
-    #         python_files_and_args.append(("alphappo/alphappo.py", f"--task {task}_0Hazards --alpha {alpha} --seed 0"))  
-    # for task in ['Goal_Hopper']:
-    #     for alpha in [0.1, 0.3, 0.7, 0.9]:
-    #         python_files_and_args.append(("alphappo/alphappo.py", f"--task {task}_0Hazards --alpha {alpha} --seed 0"))
-    # for task in ['Goal_Swimmer']:
-    #     for alpha in [0.1, 0.3, 0.7, 0.9]:
-    #         python_files_and_args.append(("alphappo/alphappo.py", f"--task {task}_0Hazards --alpha {alpha} --seed 0"))
-    # for task in ['Push_Point']:
-    #     for alpha in [0.1, 0.3, 0.7, 0.9]:
-    #         python_files_and_args.append(("alphappo/alphappo.py", f"--task {task}_0Hazards --alpha {alpha} --seed 0"))
-    # for task in ['Push_Swimmer']:
-    #     for alpha in [0.1, 0.3, 0.7, 0.9]:
-    #         python_files_and_args.append(("alphappo/alphappo.py", f"--task {task}_0Hazards --alpha {alpha} --seed 0"))
-    # for task in ['Push_Walker']:
-    #     for alpha in [0.1, 0.3, 0.7, 0.9]:
-    #         python_files_and_args.append(("alphappo/alphappo.py", f"--task {task}_0Hazards --alpha {alpha} --seed 0"))
+    #     for seed in [0,1,2]:
+    #         python_files_and_args.append(("vmpo/vmpo.py", f"--task {task}_0Hazards --seed {seed}"))  
     
-        
-    run(python_files_and_args, [0,1,2,3,4,5,6,7])
+    log_dict = {}
+    base_dir = "../Final_Results"
+    origin_dirs = os.listdir(base_dir)
+    for origin_dir in origin_dirs:
+        log_dict[origin_dir] = [osp.join(base_dir, origin_dir, single_dir) for single_dir in os.listdir(osp.join(base_dir, origin_dir))]
+    
+    for key in log_dict.keys():
+        for dire in log_dict[key]:
+            python_files_and_args.append(("utils/plot_all.py", f"{dire}/ -s 28 --title {key}/{dire.split('/')[-1]} --value MinEpRet --reward"))
+    
+    # for seed in [0, 1]:
+    #     for task in ['Ant', 'HalfCheetah', 'Reacher']:
+    #         python_files_and_args.append(("ppo-mujoco/ppo.py", f"-m {task} --seed {seed}"))
+
+    # for seed in [0,1]:
+    #     for task in ['Humanoid', 'HumanoidStandup']:
+    #         python_files_and_args.append(("a2c-mujoco/a2c.py", f"-m {task} --seed {seed}"))
+
+    # for seed in [0, 1]:
+    #     for task in ['Walker2d']:
+    #         detailed = "--detailed"
+    #         if task in ['Walker2d']:
+    #             detailed = ""
+    #         python_files_and_args.append(("papo-mujoco/papo.py", f"-m {task} --seed {seed} --exp_name papo_1 {detailed}"))
+    #         python_files_and_args.append(("papo-mujoco/papo.py", f"-m {task} --seed {seed} --exp_name papo_2 {detailed} --omega1 0.005 --omega2 0.01"))
+    #         python_files_and_args.append(("papo-mujoco/papo.py", f"-m {task} --seed {seed} --exp_name papo_3 {detailed} --omega1 0.01 --omega2 0.01"))
+
+    run(python_files_and_args, [0,1,2,3])
