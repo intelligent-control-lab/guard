@@ -6,9 +6,10 @@ import numpy as np
 from PIL import Image
 from copy import deepcopy
 from collections import OrderedDict
-import mujoco_py
-from mujoco_py import MjViewer, MujocoException, const, MjRenderContextOffscreen
-
+# import mujoco_py
+# from mujoco_py import MjViewer, MujocoException, const, MjRenderContextOffscreen
+import mujoco
+import mujoco.viewer
 from safe_rl_envs.envs.world import World, Robot
 
 import sys
@@ -72,12 +73,12 @@ def theta2vec(theta):
     return np.array([np.cos(theta), np.sin(theta), 0.0])
 
 
-def quat2mat(quat):
-    ''' Convert Quaternion to a 3x3 Rotation Matrix using mujoco '''
-    q = np.array(quat, dtype='float64')
-    m = np.zeros(9, dtype='float64')
-    mujoco_py.functions.mju_quat2Mat(m, q)
-    return m.reshape((3,3))
+# def quat2mat(quat):
+#     ''' Convert Quaternion to a 3x3 Rotation Matrix using mujoco '''
+#     q = np.array(quat, dtype='float64')
+#     m = np.zeros(9, dtype='float64')
+#     mujoco_py.functions.mju_quat2Mat(m, q)
+#     return m.reshape((3,3))
 
 
 def quat2zalign(quat):
@@ -124,6 +125,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'robot_keepout': 0.4,  # Needs to be set to match the robot XML used
         'robot_base': 'xmls/car.xml',  # Which robot XML to use as the base
         'robot_rot': None,  # Override robot starting angle
+        'arm_range': 2.0, # Maximum XY reach out distance of arm robots
 
         # Starting position distribution
         'randomize_layout': True,  # If false, set the random seed before layout to constant
@@ -170,6 +172,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'render_lidar_size': 0.025, 
         'render_lidar_offset_init': 0.5, 
         'render_lidar_offset_delta': 0.06, 
+        'render_compass_radius': 0.3, 
+        'render_compass_size': 0.05, 
 
         # Vision observation parameters
         'vision_size': (60, 40),  # Size (width, height) of vision observation; gets flipped internally to (rows, cols) format
@@ -412,6 +416,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         self.build_placements_dict()
 
         self.viewer = None
+        self.renderer = None
         self.world = None
         self.clear()
 
@@ -426,38 +431,38 @@ class Engine(gym.Env, gym.utils.EzPickle):
             assert key in self.DEFAULT, f'Bad key {key}'
             setattr(self, key, value)
 
-    @property
-    def sim(self):
-        ''' Helper to get the world's simulation instance '''
-        return self.world.sim
+    # @property
+    # def sim(self):
+    #     ''' Helper to get the world's simulation instance '''
+    #     return self.world.sim
 
     @property
     def model(self):
         ''' Helper to get the world's model instance '''
-        return self.sim.model
+        return self.world.model
 
     @property
     def data(self):
         ''' Helper to get the world's simulation data instance '''
-        return self.sim.data
+        return self.world.data
 
     @property
     def robot_pos(self):
         ''' Helper to get current robot position '''
-        return self.data.get_body_xpos('robot').copy()
+        return self.data.body('robot').xpos.copy()
     
     @property
     def arm_end_pos(self):
         ''' Helper to get current robot position '''
-        return self.data.get_body_xpos('link_' + str(self.arm_link_n)).copy()
+        return self.data.body('link_' + str(self.arm_link_n)).xpos.copy()
 
     @property
     def goal_pos(self):
         ''' Helper to get goal position from layout '''
         if self.task in ['goal', 'push']:
-            return self.data.get_body_xpos('goal').copy()
+            return self.data.body('goal').xpos.copy()
         elif self.task == 'button':
-            return self.data.get_body_xpos(f'button{self.goal_button}').copy()
+            return self.data.body(f'button{self.goal_button}').xpos.copy()
         elif self.task == 'circle':
             return ORIGIN_COORDINATES
         elif self.task == 'none':
@@ -472,74 +477,74 @@ class Engine(gym.Env, gym.utils.EzPickle):
     @property
     def box_pos(self):
         ''' Helper to get the box position '''
-        return self.data.get_body_xpos('box').copy()
+        return self.data.body('box').xpos.copy()
 
     @property
     def buttons_pos(self):
         ''' Helper to get the list of button positions '''
-        return [self.data.get_body_xpos(f'button{i}').copy() for i in range(self.buttons_num)]
+        return [self.data.body(f'button{i}').xpos.copy() for i in range(self.buttons_num)]
 
     @property
     def vases_pos(self):
         ''' Helper to get the list of vase positions '''
-        return [self.data.get_body_xpos(f'vase{p}').copy() for p in range(self.vases_num)]
+        return [self.data.body(f'vase{p}').xpos.copy() for p in range(self.vases_num)]
 
     @property
     def gremlins_obj_pos(self):
         ''' Helper to get the current gremlin position '''
-        return [self.data.get_body_xpos(f'gremlin{i}obj').copy() for i in range(self.gremlins_num)]
+        return [self.data.body(f'gremlin{i}obj').xpos.copy() for i in range(self.gremlins_num)]
     
     @property
     def ghosts_pos(self):
         ''' Helper to get the current ghost position '''
         if self.ghosts_contact:
-            return [self.data.get_body_xpos(f'ghost{i}obj').copy() for i in range(self.ghosts_num)]
+            return [self.data.body(f'ghost{i}obj').xpos.copy() for i in range(self.ghosts_num)]
         else:
-            return [self.data.get_body_xpos(f'ghost{i}mocap').copy()  + np.r_[self.layout[f'ghost{i}'], 2e-2] for i in range(self.ghosts_num)]
+            return [self.data.body(f'ghost{i}mocap').xpos.copy()  + np.r_[self.layout[f'ghost{i}'], 2e-2] for i in range(self.ghosts_num)]
     
     @property
     def ghost3Ds_pos(self):
         ''' Helper to get the current 3D ghost position '''
         if self.ghost3Ds_contact:
-            return [self.data.get_body_xpos(f'ghost3D{i}obj').copy() for i in range(self.ghost3Ds_num)]
+            return [self.data.body(f'ghost3D{i}obj').xpos.copy() for i in range(self.ghost3Ds_num)]
         else:
-            return [self.data.get_body_xpos(f'ghost3D{i}mocap').copy() + np.r_[self.layout[f'ghost3D{i}'],self._ghost3Ds_z[i]] for i in range(self.ghost3Ds_num)]
+            return [self.data.body(f'ghost3D{i}mocap').xpos.copy() + np.r_[self.layout[f'ghost3D{i}'],self._ghost3Ds_z[i]] for i in range(self.ghost3Ds_num)]
 
     @property
     def robbers_pos(self):
         ''' Helper to get the current robber position '''
         if self.robbers_contact:
-            return [self.data.get_body_xpos(f'robber{i}obj').copy() for i in range(self.robbers_num)]
+            return [self.data.body(f'robber{i}obj').xpos.copy() for i in range(self.robbers_num)]
         else:
-            return [self.data.get_body_xpos(f'robber{i}mocap').copy()  + np.r_[self.layout[f'robber{i}'], 2e-2] for i in range(self.robbers_num)]
+            return [self.data.body(f'robber{i}mocap').xpos.copy()  + np.r_[self.layout[f'robber{i}'], 2e-2] for i in range(self.robbers_num)]
     
     @property
     def robber3Ds_pos(self):
         ''' Helper to get the current 3D robber position '''
         if self.robber3Ds_contact:
-            return [self.data.get_body_xpos(f'robber3D{i}obj').copy() for i in range(self.robber3Ds_num)]
+            return [self.data.body(f'robber3D{i}obj').xpos.copy() for i in range(self.robber3Ds_num)]
         else:
-            return [self.data.get_body_xpos(f'robber3D{i}mocap').copy() + np.r_[self.layout[f'robber3D{i}'],self._robber3Ds_z[i]] for i in range(self.robber3Ds_num)]
+            return [self.data.body(f'robber3D{i}mocap').xpos.copy() + np.r_[self.layout[f'robber3D{i}'],self._robber3Ds_z[i]] for i in range(self.robber3Ds_num)]
 
     @property
     def pillars_pos(self):
         ''' Helper to get list of pillar positions '''
-        return [self.data.get_body_xpos(f'pillar{i}').copy() for i in range(self.pillars_num)]
+        return [self.data.body(f'pillar{i}').xpos.copy() for i in range(self.pillars_num)]
 
     @property
     def hazards_pos(self):
         ''' Helper to get the hazards positions from layout '''
-        return [self.data.get_body_xpos(f'hazard{i}').copy() for i in range(self.hazards_num)]
+        return [self.data.body(f'hazard{i}').xpos.copy() for i in range(self.hazards_num)]
     
     @property
     def hazard3Ds_pos(self):
         ''' Helper to get the hazards positions from layout '''
-        return [self.data.get_body_xpos(f'hazard3D{i}').copy() for i in range(self.hazard3Ds_num)]
+        return [self.data.body(f'hazard3D{i}').xpos.copy() for i in range(self.hazard3Ds_num)]
 
     @property
     def walls_pos(self):
         ''' Helper to get the hazards positions from layout '''
-        return [self.data.get_body_xpos(f'wall{i}').copy() for i in range(self.walls_num)]
+        return [self.data.body(f'wall{i}').xpos.copy() for i in range(self.walls_num)]
 
     def build_observation_space(self):
         ''' Construct observtion space.  Happens only once at during __init__ '''
@@ -748,7 +753,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
             conflicted = True
             for _ in range(100):
                 xy = self.draw_placement(placements, keepout)
-                if 'arm' in self.robot_base and 'hazard3D' in name and np.sqrt(np.sum(np.square(xy))) > 2:
+                if 'arm' in self.robot_base and 'hazard3D' in name and np.sqrt(np.sum(np.square(xy))) > self.arm_range:
                     continue
                 if placement_is_valid(xy, layout):
                     conflicted = False
@@ -1158,10 +1163,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 dist = np.sqrt(np.sum(np.square(goal_xyz[:2] - other_xy)))
                 if dist < other_keepout + self.placements_margin + keepout:
                     return False
-            if 'arm' in self.robot_base:
-                end_pos = self.arm_end_pos
-                if np.sqrt(np.sum(np.square(goal_xyz - end_pos))) < self.goal_size:
-                    return False
             goal_pos = goal_xyz
         else:  
             goal_xy = self.draw_placement(placements, keepout)
@@ -1174,7 +1175,12 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         if np.sqrt(np.sum(np.square(goal_pos[:2]))) > self.goal_travel:
             return False
-        
+        if 'arm' in self.robot_base:
+            end_pos = self.arm_end_pos
+            if np.sqrt(np.sum(np.square(goal_pos - end_pos))) < self.goal_size:
+                return False
+            if np.sqrt(np.sum(np.square(goal_pos[:2]))) > self.arm_range:
+                return False
         self.layout['goal'] = goal_pos
         return True
 
@@ -1192,9 +1198,9 @@ class Engine(gym.Env, gym.utils.EzPickle):
         self.world_config_dict['geoms']['goal']['pos'] = self.layout['goal']
         #self.world.rebuild(deepcopy(self.world_config_dict))
         #self.update_viewer_sim = True
-        goal_body_id = self.sim.model.body_name2id('goal')
-        self.sim.model.body_pos[goal_body_id] = self.layout['goal']
-        self.sim.forward()
+        goal_body_id = self.model.body('goal').id
+        self.model.body_pos[goal_body_id] = self.layout['goal']
+        mujoco.mj_forward(self.model, self.data)
         self.layout['goal'] = self.layout['goal'][:2]
 
     def build_goal_button(self):
@@ -1252,7 +1258,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         # Reset stateful parts of the environment
         self.first_reset = False  # Built our first world successfully
-
+        self.reset_viewer = True
         # Return an observation
         return self.obs()
 
@@ -1373,7 +1379,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # Get a render context so we can
         rows, cols = self.vision_size
         width, height = cols, rows
-        vision = self.sim.render(width, height, camera_name='vision', mode='offscreen')
+        vision = self.render()
         return np.array(vision, dtype='float32') / 255
 
     def obs_lidar(self, positions, group):
@@ -1398,26 +1404,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
         #     return self.obs_lidar_natural(group)
         else:
             raise ValueError(f'Invalid lidar_type {self.lidar_type}')
-
-    def obs_lidar_natural(self, group):
-        '''
-        Natural lidar casts rays based on the ego-frame of the robot.
-        Rays are circularly projected from the robot body origin
-        around the robot z axis.
-        '''
-        body = self.model.body_name2id('robot')
-        grp = np.asarray([i == group for i in range(int(const.NGROUP))], dtype='uint8')
-        pos = np.asarray(self.world.robot_pos(), dtype='float64')
-        mat_t = self.world.robot_mat()
-        obs = np.zeros(self.lidar_num_bins)
-        for i in range(self.lidar_num_bins):
-            theta = (i / self.lidar_num_bins) * np.pi * 2
-            vec = np.matmul(mat_t, theta2vec(theta))  # Rotate from ego to world frame
-            vec = np.asarray(vec, dtype='float64')
-            dist, _ = self.sim.ray_fast_group(pos, vec, grp, 1, body)
-            if dist >= 0:
-                obs[i] = np.exp(-dist)
-        return obs
 
     def obs_lidar_pseudo(self, positions):
         '''
@@ -1534,7 +1520,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
     def obs(self):
         ''' Return the observation of our agent '''
-        self.sim.forward()  # Needed to get sensordata correct
+        mujoco.mj_forward(self.model, self.data) # Needed to get sensordata correct
         obs = {}
 
         if self.observe_goal_dist:
@@ -1570,13 +1556,13 @@ class Engine(gym.Env, gym.utils.EzPickle):
             for sensor in self.robot.ballangvel_names:
                 obs[sensor] = self.world.get_sensor(sensor)
             # Process angular position sensors
-            if self.sensors_angle_components:
-                for sensor in self.robot.hinge_pos_names:
-                    theta = float(self.world.get_sensor(sensor))  # Ensure not 1D, 1-element array
-                    obs[sensor] = np.array([np.sin(theta), np.cos(theta)])
-                for sensor in self.robot.ballquat_names:
-                    quat = self.world.get_sensor(sensor)
-                    obs[sensor] = quat2mat(quat)
+            # if self.sensors_angle_components:
+            #     for sensor in self.robot.hinge_pos_names:
+            #         theta = float(self.world.get_sensor(sensor))  # Ensure not 1D, 1-element array
+            #         obs[sensor] = np.array([np.sin(theta), np.cos(theta)])
+            #     for sensor in self.robot.ballquat_names:
+            #         quat = self.world.get_sensor(sensor)
+            #         obs[sensor] = quat2mat(quat)
             else:  # Otherwise read sensors directly
                 for sensor in self.robot.hinge_pos_names:
                     obs[sensor] = self.world.get_sensor(sensor)
@@ -1633,7 +1619,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
     def cost(self):
         ''' Calculate the current costs and return a dict '''
-        self.sim.forward()  # Ensure positions and contacts are correct
+        mujoco.mj_forward(self.model, self.data)  # Ensure positions and contacts are correct
         cost = {}
         # Conctacts processing
         if self.constrain_vases:
@@ -1651,7 +1637,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         buttons_constraints_active = self.constrain_buttons and (self.buttons_timer == 0)
         for contact in self.data.contact[:self.data.ncon]:
             geom_ids = [contact.geom1, contact.geom2]
-            geom_names = sorted([self.model.geom_id2name(g) for g in geom_ids])
+            geom_names = sorted([self.model.geom(g).name for g in geom_ids])
             if self.constrain_vases and any(n.startswith('vase') for n in geom_names):
                 if any(n in self.robot.geom_names for n in geom_names):
                     cost['cost_vases_contact'] += self.vases_contact_cost
@@ -1679,7 +1665,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
             cost['cost_vases_displace'] = 0
             for i in range(self.vases_num):
                 name = f'vase{i}'
-                dist = np.sqrt(np.sum(np.square(self.data.get_body_xpos(name)[:2] - self.reset_layout[name])))
+                dist = np.sqrt(np.sum(np.square(self.data.body(name).xpos[:2] - self.reset_layout[name])))
                 if dist > self.vases_displace_threshold:
                     cost['cost_vases_displace'] += dist * self.vases_displace_cost
 
@@ -1770,12 +1756,12 @@ class Engine(gym.Env, gym.utils.EzPickle):
             for i in range(self.ghosts_num):
                 name = f'ghost{i}'
                 ghost_origin = self.layout[name]
-                ghost_pos_mocap = self.data.get_body_xpos(name +'mocap').copy()
+                ghost_pos_mocap = self.data.body(name +'mocap').xpos.copy()
                 ghost_pos_last_dict.append(ghost_pos_mocap[:2] + ghost_origin)
             for i in range(self.ghosts_num):
                 name = f'ghost{i}'
                 ghost_origin = self.layout[name]
-                ghost_pos_mocap = self.data.get_body_xpos(name +'mocap').copy()
+                ghost_pos_mocap = self.data.body(name +'mocap').xpos.copy()
                 ghost_pos_last = ghost_pos_mocap[:2] + ghost_origin
                 target =  ghost_pos_mocap[:2]
                 for j in range(self.ghosts_num):
@@ -1802,12 +1788,12 @@ class Engine(gym.Env, gym.utils.EzPickle):
             for i in range(self.ghost3Ds_num):
                 name = f'ghost3D{i}'
                 ghost_origin = np.r_[self.layout[name], self._ghost3Ds_z[i]]
-                ghost_pos_mocap = self.data.get_body_xpos(name +'mocap').copy()
+                ghost_pos_mocap = self.data.body(name +'mocap').xpos.copy()
                 ghost3D_pos_last_dict.append(ghost_pos_mocap + ghost_origin)
             for i in range(self.ghost3Ds_num):
                 name = f'ghost3D{i}'
                 ghost_origin = np.r_[self.layout[name], self._ghost3Ds_z[i]]
-                ghost_pos_mocap = self.data.get_body_xpos(name +'mocap').copy()
+                ghost_pos_mocap = self.data.body(name +'mocap').xpos.copy()
                 ghost_pos_last = ghost_pos_mocap + ghost_origin
                 target =  ghost_pos_mocap
                 for j in range(self.ghost3Ds_num):
@@ -1835,12 +1821,12 @@ class Engine(gym.Env, gym.utils.EzPickle):
             for i in range(self.robbers_num):
                 name = f'robber{i}'
                 robber_origin = self.layout[name]
-                robber_pos_mocap = self.data.get_body_xpos(name +'mocap').copy()
+                robber_pos_mocap = self.data.body(name +'mocap').xpos.copy()
                 robber_pos_last_dict.append(robber_pos_mocap[:2] + robber_origin)
             for i in range(self.robbers_num):
                 name = f'robber{i}'
                 robber_origin = self.layout[name]
-                robber_pos_mocap = self.data.get_body_xpos(name +'mocap').copy()
+                robber_pos_mocap = self.data.body(name +'mocap').xpos.copy()
                 robber_pos_last = robber_pos_mocap[:2] + robber_origin
                 target =  robber_pos_mocap[:2]
                 for j in range(self.robbers_num):
@@ -1877,12 +1863,12 @@ class Engine(gym.Env, gym.utils.EzPickle):
             for i in range(self.robber3Ds_num):
                 name = f'robber3D{i}'
                 robber_origin = np.r_[self.layout[name], self._robber3Ds_z[i]]
-                robber_pos_mocap = self.data.get_body_xpos(name +'mocap').copy()
+                robber_pos_mocap = self.data.body(name +'mocap').xpos.copy()
                 robber3D_pos_last_dict.append(robber_pos_mocap + robber_origin)
             for i in range(self.robber3Ds_num):
                 name = f'robber3D{i}'
                 robber_origin = np.r_[self.layout[name], self._robber3Ds_z[i]]
-                robber_pos_mocap = self.data.get_body_xpos(name +'mocap').copy()
+                robber_pos_mocap = self.data.body(name +'mocap').xpos.copy()
                 robber_pos_last = robber_pos_mocap + robber_origin
                 target =  robber_pos_mocap
                 for j in range(self.robber3Ds_num):
@@ -1916,19 +1902,18 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 self.data.set_mocap_pos(name + 'mocap', pos)
     def update_layout(self):
         ''' Update layout dictionary with new places of objects '''
-        self.sim.forward()
+        mujoco.mj_forward(self.model, self.data)
         for k in list(self.layout.keys()):
             # Mocap objects have to be handled separately
             if 'gremlin' in k or 'ghost' in k or 'robber' in k:
                 continue
-            self.layout[k] = self.data.get_body_xpos(k)[:2].copy()
+            self.layout[k] = self.data.body(k).xpos[:2].copy()
 
     def buttons_timer_tick(self):
         ''' Tick the buttons resampling timer '''
         self.buttons_timer = max(0, self.buttons_timer - 1)
 
-
-    def step(self, action, simulate_in_adamba=False):
+    def step(self, action):
         ''' Take a step and return observation, reward, done, and info '''
         action = np.array(action, copy=False)  # Cast to ndarray
         assert not self.done, 'Environment must be reset before stepping'
@@ -1969,7 +1954,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         for _ in range(self.rs.binomial(self.frameskip_binom_n, self.frameskip_binom_p)):
             try:
                 self.set_mocaps()
-                self.sim.step()  # Physics simulation step
+                mujoco.mj_step(self.model, self.data)  # Physics simulation step
             except MujocoException as me:
                 print('MujocoException', me)
                 exception = True
@@ -1979,47 +1964,41 @@ class Engine(gym.Env, gym.utils.EzPickle):
             reward = self.reward_exception
             info['cost_exception'] = 1.0
         else:
-            self.sim.forward()  # Needed to get sensor readings correct!
+            mujoco.mj_forward(self.model, self.data)  # Needed to get sensor readings correct!
 
-            if simulate_in_adamba:
-                # avoid step in simulation changing self.last_goal_dis etc
-                reward = None
-                pass
-            else:
-                # Reward processing
-                reward = self.reward()
+            # Reward processing
+            reward = self.reward()
 
-                # Constraint violations
-                info.update(self.cost())
+            # Constraint violations
+            info.update(self.cost())
 
-                # Button timer (used to delay button resampling)
-                self.buttons_timer_tick()
+            # Button timer (used to delay button resampling)
+            self.buttons_timer_tick()
 
-                # Goal processing
-                if self.goal_met():
-                    info['goal_met'] = True
-                    reward += self.reward_goal
-                    if self.continue_goal:
-                        # Update the internal layout so we can correctly resample (given objects have moved)
-                        self.update_layout()
-                        # Reset the button timer (only used for task='button' environments)
-                        self.buttons_timer = self.buttons_resampling_delay
-                        # Try to build a new goal, end if we fail
-                        if self.terminate_resample_failure:
-                            try:
-                                self.build_goal()
-                            except ResamplingError as e:
-                                # Normal end of episode
-                                self.done = True
-                        else:
-                            # Try to make a goal, which could raise a ResamplingError exception
+            # Goal processing
+            if self.goal_met():
+                info['goal_met'] = True
+                reward += self.reward_goal
+                if self.continue_goal:
+                    # Update the internal layout so we can correctly resample (given objects have moved)
+                    self.update_layout()
+                    # Reset the button timer (only used for task='button' environments)
+                    self.buttons_timer = self.buttons_resampling_delay
+                    # Try to build a new goal, end if we fail
+                    if self.terminate_resample_failure:
+                        try:
                             self.build_goal()
+                        except ResamplingError as e:
+                            # Normal end of episode
+                            self.done = True
                     else:
-                        self.done = True
+                        # Try to make a goal, which could raise a ResamplingError exception
+                        self.build_goal()
+                else:
+                    self.done = True
 
         # Timeout
-        if not simulate_in_adamba:
-            self.steps += 1
+        self.steps += 1
         if self.steps >= self.num_steps:
             self.done = True  # Maximum number of steps in an episode reached
 
@@ -2096,6 +2075,34 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 print('Warning: reward was outside of range!')
         return reward
 
+    #----------------------------------------------------------------
+    # Render functions
+    #----------------------------------------------------------------
+
+    def viewer_setup(self):
+        # self.viewer.cam.trackbodyid = 0         # id of the body to track ()
+        # self.viewer.cam.distance = self.model.stat.extent * 3       # how much you "zoom in", model.stat.extent is the max limits of the arena
+        self.viewer.cam.distance = 6
+        self.viewer.cam.lookat[0] = 0         # x,y,z offset from the object (works if trackbodyid=-1)
+        self.viewer.cam.lookat[1] = -3
+        self.viewer.cam.lookat[2] = 5
+        self.viewer.cam.elevation = -60           # camera rotation around the axis in the plane going through the frame origin (if 0 you just see a line)
+        self.viewer.cam.azimuth = 90              # camera rotation around the camera's vertical axis
+        self.viewer.opt.geomgroup = 1    
+    
+    def renderer_setup(self):
+        # self.viewer.cam.trackbodyid = 0         # id of the body to track ()
+        # self.viewer.cam.distance = self.model.stat.extent * 3       # how much you "zoom in", model.stat.extent is the max limits of the arena
+        cam = mujoco._structs.MjvCamera()
+        opt = mujoco._structs.MjvOption()
+        cam.distance = 6
+        cam.lookat = [0, -3, 5]         # x,y,z offset from the object (works if trackbodyid=-1)
+        cam.elevation = -60           # camera rotation around the axis in the plane going through the frame origin (if 0 you just see a line)
+        cam.azimuth = 90              # camera rotation around the camera's vertical axis
+        opt.geomgroup = 1 
+
+        return cam, opt
+
     def render_lidar(self, poses, color, offset, group):
         ''' Render the lidar observation '''
         robot_pos = self.world.robot_pos()
@@ -2110,11 +2117,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
             binpos = np.array([np.cos(theta) * rad, np.sin(theta) * rad, offset])
             pos = robot_pos + np.matmul(binpos, robot_mat.transpose())
             alpha = min(1, sensor + .1)
-            self.viewer.add_marker(pos=pos,
-                                   size=self.render_lidar_size * np.ones(3),
-                                   type=const.GEOM_SPHERE,
-                                   rgba=np.array(color) * alpha,
-                                   label='')
+            size=self.render_lidar_size * np.ones(3)
+            self.render_sphere(pos, size, color, alpha)
     
     def render_lidar3D(self, poses, color, offset, group):
         ''' Render the lidar observation '''
@@ -2139,12 +2143,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
                     binpos = np.array([np.cos(theta_xy) * rad_xy, np.sin(theta_xy) * rad_xy, h_z])
                     pos = body_pos + np.matmul(binpos, body_mat.transpose())
                     alpha = min(1, sensor + .1)
-                    self.viewer.add_marker(pos=pos,
-                                        size=self.render_lidar_size * np.ones(3),
-                                        type=const.GEOM_SPHERE,
-                                        rgba=np.array(color) * alpha,
-                                        label='')
-            
+                    size=self.render_lidar_size * np.ones(3)
+                    self.render_sphere(pos, size, color, alpha)
 
 
     def render_compass(self, pose, color, offset):
@@ -2155,89 +2155,68 @@ class Engine(gym.Env, gym.utils.EzPickle):
             body_pos = self.world.body_pos(body)
             body_mat = self.world.body_mat(body)
             if self.compass_shape == 3:
-                compass_pos = compass[body_idx,] * 0.3
+                compass_pos = compass[body_idx,] * self.render_compass_radius
             if self.compass_shape == 2:
-                compass_pos = np.concatenate([compass[body_idx, :2] * 0.15, [offset]])
+                compass_pos = np.concatenate([compass[body_idx, :2] * self.render_compass_radius* 0.5, [offset]])
             pos = body_pos + np.matmul(compass_pos, body_mat.transpose())
-            self.viewer.add_marker(pos=pos,
-                                size=.05 * np.ones(3),
-                                type=const.GEOM_SPHERE,
-                                rgba=np.array(color) * 0.5,
-                                label='')
+            size= self.render_compass_size * np.ones(3)
+            self.render_sphere(pos, size, color, 0.5)
 
-    def render_area(self, pos, size, color, label='', alpha=0.1):
-        ''' Render a radial area in the environment '''
-        z_size = min(size, 0.3)
-        pos = np.asarray(pos)
-        if pos.shape == (2,):
-            pos = np.r_[pos, 0]  # Z coordinate 0
-        self.viewer.add_marker(pos=pos,
-                               size=[size, size, z_size],
-                               type=const.GEOM_CYLINDER,
-                               rgba=np.array(color) * alpha,
-                               label=label if self.render_labels else '')
-
-    def render_sphere(self, pos, size, color, label='', alpha=0.1):
+    def render_sphere(self, pos, size, color, alpha=0.1):
         ''' Render a radial area in the environment '''
         pos = np.asarray(pos)
         if pos.shape == (2,):
             pos = np.r_[pos, 0]  # Z coordinate 0
-        self.viewer.add_marker(pos=pos,
-                               size=size * np.ones(3),
-                               type=const.GEOM_SPHERE,
-                               rgba=np.array(color) * alpha,
-                               label=label if self.render_labels else '')
-
-    def render_swap_callback(self):
-        ''' Callback between mujoco render and swapping GL buffers '''
-        if self.observe_vision and self.vision_render:
-            self.viewer.draw_pixels(self.save_obs_vision, 0, 0)
-
-    def viewer_setup(self):
-        # self.viewer.cam.trackbodyid = 0         # id of the body to track ()
-        # self.viewer.cam.distance = self.model.stat.extent * 3       # how much you "zoom in", model.stat.extent is the max limits of the arena
-        self.viewer.cam.distance = 5
-        self.viewer.cam.lookat[0] = 0         # x,y,z offset from the object (works if trackbodyid=-1)
-        self.viewer.cam.lookat[1] = -3
-        self.viewer.cam.lookat[2] = 5
-        self.viewer.cam.elevation = -60           # camera rotation around the axis in the plane going through the frame origin (if 0 you just see a line)
-        self.viewer.cam.azimuth = 90              # camera rotation around the camera's vertical axis
-
+        mujoco.mjv_initGeom(
+            self.renderer._scene.geoms[self.renderer._scene.ngeom],
+            type=mujoco.mjtGeom.mjGEOM_SPHERE,
+            size=size,
+            pos=pos.flatten(),
+            mat=np.eye(3).flatten(),
+            rgba=np.array(color) * alpha,
+            )
+        self.renderer._scene.ngeom += 1
+        if self.viewer:
+            mujoco.mjv_initGeom(
+                self.viewer.user_scn.geoms[self.viewer.user_scn.ngeom],
+                type=mujoco.mjtGeom.mjGEOM_SPHERE,
+                size=size * np.ones(3),
+                pos=pos.flatten(),
+                mat=np.eye(3).flatten(),
+                rgba=np.array(color) * alpha,
+            )
+            self.viewer.user_scn.ngeom += 1
+    
     def render(self,
                mode='human', 
                camera_id=-1,
                width=DEFAULT_WIDTH,
-               height=DEFAULT_HEIGHT
+               height=DEFAULT_HEIGHT,
                ):
         ''' Render the environment to the screen '''
-        
+        model = self.model
+        data = self.data
+        self.model.vis.global_.offwidth = DEFAULT_WIDTH
+        self.model.vis.global_.offheight = DEFAULT_HEIGHT
+        if self.viewer is not None and self.reset_viewer:
+            self.viewer.close()
+            self.viewer = None
+            self.reset_viewer = False
         if self.viewer is None or mode!=self._old_render_mode:
             # Set camera if specified
             if mode == 'human':
-
-                self.viewer = MjViewer(self.sim)
-                self.viewer.cam.fixedcamid = -1
-                self.viewer.cam.type = const.CAMERA_FREE
-            else:
-                self.viewer = MjRenderContextOffscreen(self.sim)
-                self.viewer._hide_overlay = True
-                self.viewer.cam.fixedcamid = camera_id #self.model.camera_name2id(mode)
-                # self.viewer.cam.type = const.CAMERA_FIXED
-                self.viewer.cam.type = const.CAMERA_FREE
-            self.viewer_setup()
-            self.viewer.render_swap_callback = self.render_swap_callback
-            # Turn all the geom groups on
-            self.viewer.vopt.geomgroup[:] = 1
+                self.viewer = mujoco.viewer.launch_passive(model, data)
+                self.viewer_setup()  
+            
+            self.renderer =  mujoco.Renderer(model, width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT)
+            self.renderer_cam, self.renderer_opt = self.renderer_setup()
             self._old_render_mode = mode
-        # print('here2', self.viewer.cam.fixedcamid)
-        
-        self.viewer.update_sim(self.sim)
+        mujoco.mj_step(model, data)
+        if self.viewer:
+            self.viewer.user_scn.ngeom = 0
+        self.renderer._scene.ngeom = 0
+        self.renderer.update_scene(data, self.renderer_cam, self.renderer_opt)
         self.viewer._hide_overlay = True
-        if camera_id is not None:
-            # Update camera if desired
-            self.viewer.cam.fixedcamid = camera_id
-
-        
 
         # Lidar markers
         if self.render_lidar_markers:
@@ -2302,7 +2281,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         # Add indicator for nonzero cost
         if self._cost.get('cost', 0) > 0:
-            self.render_sphere(self.world.robot_pos(), 0.5, COLOR_RED, alpha=.5)
+            self.render_sphere(self.world.robot_pos(), 0.5*np.ones(3), COLOR_RED, alpha=.5)
 
         # Draw vision pixels
         if self.observe_vision and self.vision_render:
@@ -2313,13 +2292,9 @@ class Engine(gym.Env, gym.utils.EzPickle):
             self.save_obs_vision = vision
 
         if mode=='human':
-            self.viewer.render()
+            self.viewer.sync()
         elif mode=='rgb_array':
-            self.viewer.render(width, height)
-            data = self.viewer.read_pixels(width, height, depth=False)
-            self.viewer._markers[:] = []
-            self.viewer._overlay.clear()
-            return data[::-1, :, :]
+            return self.renderer.render()[:, :, [2, 1, 0]]
 
     def adaptive_safety_index(self, k=2, sigma=0.04, n=2):
         '''

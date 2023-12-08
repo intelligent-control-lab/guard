@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mujoco>
+	<size njmax="3000" nconmax="1000"></size>
+	<option timestep="0.02"></option>
+	<default>
+		<geom condim="3" density="1" rgba="1 0 0 1"></geom>
+		<joint damping=".001"></joint>
+		<motor ctrlrange="-1 1" ctrllimited="true" forcerange="-.05 .05" forcelimited="true"></motor>
+		<velocity ctrlrange="-1 1" ctrllimited="true" forcerange="-.05 .05" forcelimited="true"></velocity>
+		<site size="0.032" type="sphere"></site>
+	</default>
+	<worldbody>
+		<geom name="floor" size="3.5 3.5 0.1" type="plane" condim="3" rgba="1 1 1 1" material="MatPlane"></geom>
+		<body name="robot" pos="0.0 0.0 0.1" quat="1.0 0.0 0.0 0.0">
+			<camera name="vision" pos="0 0 .15" xyaxes="0 -1 0 .4 0 1" fovy="90"></camera>
+			<camera name="track" mode="track" pos="0.0 -2.0 2" xyaxes="1.0 -0.0 0 0.0 1.0 1"></camera>
+			<joint type="slide" axis="1 0 0" name="robot_x" damping="0.01"></joint>
+			<joint type="slide" axis="0 1 0" name="robot_y" damping="0.01"></joint>
+			<joint type="hinge" axis="0 0 1" name="robot_z" damping="0.005"></joint>
+			<geom name="robot" type="sphere" size=".1" friction="1 0.01 0.01"></geom>
+			<geom name="pointarrow" pos="0.1 0 0" size="0.05 0.05 0.05" type="box"></geom>
+			<site name="robot" rgba="1 0 0 .1"></site>
+		</body>
+		<body name="goal" pos="0.0 0.0 0.0" quat="1.0 0.0 0.0 0.0">
+			<joint type="slide" axis="1 0 0" name="goal_x" damping="1" limited="false"></joint>
+			<joint type="slide" axis="0 1 0" name="goal_y" damping="1" limited="false"></joint>
+			<geom name="goal" type="sphere" size="0.5" rgba="0.0 1.0 0.0 0.25" group="0" contype="0" conaffinity="0"></geom>
+		</body>
+		<body name="hazard0" pos="0.0 0.0 0.02" quat="1.0 0.0 0.0 0.0">
+			<joint type="slide" axis="1 0 0" name="hazard0_x" damping="1" limited="false"></joint>
+			<joint type="slide" axis="0 1 0" name="hazard0_y" damping="1" limited="false"></joint>
+			<geom name="hazard0" type="cylinder" size="0.3 0.01" rgba="0.0 0.0 1.0 0.25" group="3" contype="0" conaffinity="0"></geom>
+		</body>
+		<body name="hazard1" pos="0.0 0.0 0.02" quat="1.0 0.0 0.0 0.0">
+			<joint type="slide" axis="1 0 0" name="hazard1_x" damping="1" limited="false"></joint>
+			<joint type="slide" axis="0 1 0" name="hazard1_y" damping="1" limited="false"></joint>
+			<geom name="hazard1" type="cylinder" size="0.3 0.01" rgba="0.0 0.0 1.0 0.25" group="3" contype="0" conaffinity="0"></geom>
+		</body>
+		<body name="hazard2" pos="0.0 0.0 0.02" quat="1.0 0.0 0.0 0.0">
+			<joint type="slide" axis="1 0 0" name="hazard2_x" damping="1" limited="false"></joint>
+			<joint type="slide" axis="0 1 0" name="hazard2_y" damping="1" limited="false"></joint>
+			<geom name="hazard2" type="cylinder" size="0.3 0.01" rgba="0.0 0.0 1.0 0.25" group="3" contype="0" conaffinity="0"></geom>
+		</body>
+		<body name="hazard3" pos="0.0 0.0 0.02" quat="1.0 0.0 0.0 0.0">
+			<joint type="slide" axis="1 0 0" name="hazard3_x" damping="1" limited="false"></joint>
+			<joint type="slide" axis="0 1 0" name="hazard3_y" damping="1" limited="false"></joint>
+			<geom name="hazard3" type="cylinder" size="0.3 0.01" rgba="0.0 0.0 1.0 0.25" group="3" contype="0" conaffinity="0"></geom>
+		</body>
+		<body name="hazard4" pos="0.0 0.0 0.02" quat="1.0 0.0 0.0 0.0">
+			<joint type="slide" axis="1 0 0" name="hazard4_x" damping="1" limited="false"></joint>
+			<joint type="slide" axis="0 1 0" name="hazard4_y" damping="1" limited="false"></joint>
+			<geom name="hazard4" type="cylinder" size="0.3 0.01" rgba="0.0 0.0 1.0 0.25" group="3" contype="0" conaffinity="0"></geom>
+		</body>
+		<body name="hazard5" pos="0.0 0.0 0.02" quat="1.0 0.0 0.0 0.0">
+			<joint type="slide" axis="1 0 0" name="hazard5_x" damping="1" limited="false"></joint>
+			<joint type="slide" axis="0 1 0" name="hazard5_y" damping="1" limited="false"></joint>
+			<geom name="hazard5" type="cylinder" size="0.3 0.01" rgba="0.0 0.0 1.0 0.25" group="3" contype="0" conaffinity="0"></geom>
+		</body>
+		<body name="hazard6" pos="0.0 0.0 0.02" quat="1.0 0.0 0.0 0.0">
+			<joint type="slide" axis="1 0 0" name="hazard6_x" damping="1" limited="false"></joint>
+			<joint type="slide" axis="0 1 0" name="hazard6_y" damping="1" limited="false"></joint>
+			<geom name="hazard6" type="cylinder" size="0.3 0.01" rgba="0.0 0.0 1.0 0.25" group="3" contype="0" conaffinity="0"></geom>
+		</body>
+		<body name="hazard7" pos="0.0 0.0 0.02" quat="1.0 0.0 0.0 0.0">
+			<joint type="slide" axis="1 0 0" name="hazard7_x" damping="1" limited="false"></joint>
+			<joint type="slide" axis="0 1 0" name="hazard7_y" damping="1" limited="false"></joint>
+			<geom name="hazard7" type="cylinder" size="0.3 0.01" rgba="0.0 0.0 1.0 0.25" group="3" contype="0" conaffinity="0"></geom>
+		</body>
+		<light cutoff="100" diffuse="1 1 1" dir="0 0 -1" directional="true" exponent="1" pos="0 0 0.5" specular="0 0 0" castshadow="false"></light>
+		<camera name="fixednear" pos="0 -2 2" zaxis="0 -1 1"></camera>
+		<camera name="fixedfar" pos="0 -5 5" zaxis="0 -1 1"></camera>
+	</worldbody>
+	<sensor>
+		<accelerometer site="robot" name="accelerometer"></accelerometer>
+		<velocimeter site="robot" name="velocimeter"></velocimeter>
+		<gyro site="robot" name="gyro"></gyro>
+		<magnetometer site="robot" name="magnetometer"></magnetometer>
+		<subtreecom body="robot" name="subtreecom"></subtreecom>
+		<subtreelinvel body="robot" name="subtreelinvel"></subtreelinvel>
+		<subtreeangmom body="robot" name="subtreeangmom"></subtreeangmom>
+	</sensor>
+	<actuator>
+		<general gear="0.3" joint="robot_x" name="x"></general>
+		<general gear="0.3" joint="robot_y" name="y"></general>
+		<general gear="0.3" joint="robot_z" name="z"></general>
+	</actuator>
+	<equality>
+	</equality>
+	<asset>
+		<texture name="texplane" builtin="checker" height="100" width="100" rgb1="0.7 0.7 0.7" rgb2="0.8 0.8 0.8" type="2d"></texture>
+		<texture type="skybox" builtin="gradient" rgb1="0.527 0.582 0.906" rgb2="0.1 0.1 0.35" width="800" height="800" markrgb="1 1 1" mark="random" random="0.001"></texture>
+		<material name="MatPlane" reflectance="0.1" shininess="0.1" specular="0.1" texrepeat="10 10" texture="texplane"></material>
+	</asset>
+</mujoco>
