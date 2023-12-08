@@ -11,15 +11,15 @@ def run_random(env_name):
 
     config = {
             # robot setting
-            'robot_base': 'xmls/fanuc_lr_mate/arm_lrmate.xml', 
+            'robot_base': 'xmls/fanuc_lr_mate/arm_lrmate_3.xml', 
             'robot_locations':[(0.0,0.0)],
-            'arm_range': 1.0,
+            'arm_range': 0.9,
 
             # task setting
             'task': 'goal',
             'goal_3D': True,
             'goal_z_range': [0.5,1.0],
-            'goal_size': 0.2,
+            'goal_size': 0.3,
 
             # observation setting
             'observe_goal_comp': True,  # Observe the goal with a lidar sensor
@@ -30,8 +30,6 @@ def run_random(env_name):
                             'accelerometer_link_3', 'velocimeter_link_3', 'gyro_link_3', 'magnetometer_link_3',
                             'accelerometer_link_4', 'velocimeter_link_4', 'gyro_link_4', 'magnetometer_link_4',
                             'accelerometer_link_5', 'velocimeter_link_5', 'gyro_link_5', 'magnetometer_link_5',
-                            'accelerometer_link_6', 'velocimeter_link_6', 'gyro_link_6', 'magnetometer_link_6',
-                            'accelerometer_link_7', 'velocimeter_link_7', 'gyro_link_7', 'magnetometer_link_7',
                             'touch_end_effector'],
             
             # constraint setting
@@ -41,10 +39,10 @@ def run_random(env_name):
             # lidar setting
             'lidar_num_bins': 10,
             'lidar_num_bins3D': 6,
-            'lidar_body': ['link_1', 'link_3', 'link_5', 'link_7'],
+            'lidar_body': ['link_1', 'link_5', 'link_7'],
             
             # object setting
-            'hazard3Ds_num': 2,
+            'hazard3Ds_num': 0,
             'hazard3Ds_size': 0.2,
             'hazard3Ds_z_range': [0.5, 1.0],
             
@@ -53,6 +51,31 @@ def run_random(env_name):
             'render_lidar_size': 0.015,
             'render_compass_radius': 0.15, 
             'render_compass_size': 0.03,  
+        }
+    config = {
+            # robot setting
+            'robot_base': 'xmls/unitree_go1/go1.xml',  
+
+            # task setting
+            'task': 'goal',
+            'goal_size': 0.5,
+
+            # observation setting
+            'observe_goal_comp': True,  # Observe the goal with a lidar sensor
+            'observe_hazards': True,  # Observe the vector from agent to hazards
+            'sensors_obs': ['accelerometer', 'velocimeter', 'gyro', 'magnetometer',
+                            'touch_FR', 'touch_FL', 'touch_RR', 'touch_RL'],
+
+            # constraint setting
+            'constrain_hazards': True,  # Constrain robot from being in hazardous areas
+            'constrain_indicator': False,  # If true, all costs are either 1 or 0 for a given step. If false, then we get dense cost.
+
+            # lidar setting
+            'lidar_num_bins': 16,
+            
+            # object setting
+            'hazards_num': 8,
+            'hazards_size': 0.3,
         }
     config['num_steps']=2000
     config['robot_rot']=0

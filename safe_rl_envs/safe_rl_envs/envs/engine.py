@@ -2216,7 +2216,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
             self.viewer.user_scn.ngeom = 0
         self.renderer._scene.ngeom = 0
         self.renderer.update_scene(data, self.renderer_cam, self.renderer_opt)
-        self.viewer._hide_overlay = True
 
         # Lidar markers
         if self.render_lidar_markers:

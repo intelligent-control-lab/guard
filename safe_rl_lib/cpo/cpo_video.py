@@ -13,7 +13,7 @@ from utils.safe_rl_env_config import configuration
 import os.path as osp
 import cv2
 import matplotlib.pyplot as plt
-from mujoco_py import GlfwContext
+import mujoco
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -71,9 +71,10 @@ def replay(env_fn, model_path=None, video_name=None, max_epoch=1):
         # Update obs (critical!)
         o = next_o
 
-        img_array = env.render(mode='rgb_array')
+        img_array = env.render()
+        # img_array = env.render(mode='rgb_array')
         video_array.append(img_array)
-
+        print(time_step)
         ep_ret += r
 
     # save video 
