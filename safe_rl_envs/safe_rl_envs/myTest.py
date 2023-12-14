@@ -9,63 +9,69 @@ from getkey import getkey, keys
 def run_random(env_name):
     # env = gym.make(env_name)
 
+    # config = {
+    #         # robot setting
+    #         'robot_base': 'xmls/fanuc_lr_mate/arm_lrmate_3.xml', 
+    #         # 'robot_base': 'xmls/arm_3.xml', 
+    #         'robot_locations':[(0.0,0.0)],
+    #         'robot_keepout': 0.2, 
+    #         'arm_range': 0.8,
+
+    #         # task setting
+    #         'task': 'goal',
+    #         'goal_3D': True,
+    #         'goal_z_range': [0.1,0.6],
+    #         'goal_size': 0.2,
+    #         'goal_keepout': 0.2,
+    #         # 'goal_placements': [(-1.5, -1.5, 1.5, 1.5)],
+    #         'reward_distance': 10.0,
+    #         'reward_goal': 10.0,
+            
+    #         # observation setting
+    #         'observe_goal_comp': True,  # Observe the goal with a lidar sensor
+    #         'observe_hazard3Ds': False,  # Observe the vector from agent to hazards
+    #         'compass_shape': 3,
+    #         'sensors_obs':[],
+    #         # 'sensors_obs': ['accelerometer_link_1', 'velocimeter_link_1', 'gyro_link_1', 'magnetometer_link_1',
+    #         #                 'accelerometer_link_2', 'velocimeter_link_2', 'gyro_link_2', 'magnetometer_link_2',
+    #         #                 'accelerometer_link_3', 'velocimeter_link_3', 'gyro_link_3', 'magnetometer_link_3',
+    #         #                 'accelerometer_link_4', 'velocimeter_link_4', 'gyro_link_4', 'magnetometer_link_4',
+    #         #                 'accelerometer_link_5', 'velocimeter_link_5', 'gyro_link_5', 'magnetometer_link_5',
+    #         #                 'touch_end_effector'],
+            
+    #         # constraint setting
+    #         'constrain_hazard3Ds': False,  # Constrain robot from being in hazardous areas
+    #         'constrain_indicator': False,  # If true, all costs are either 1 or 0 for a given step. If false, then we get dense cost.
+            
+    #         # lidar setting
+    #         'lidar_num_bins': 10,
+    #         'lidar_num_bins3D': 6,
+    #         'lidar_body': ['link_2', 'link_5', 'link_7'],
+    #         # 'lidar_body': ['link_1', 'link_3', 'link_5'],
+            
+    #         # object setting
+    #         'hazard3Ds_num': 0,
+    #         'hazard3Ds_size': 0.2,
+    #         'hazard3Ds_z_range': [0.1,0.1],
+            
+    #         # render setting
+    #         'render_lidar_radius': 0.08,
+    #         'render_lidar_size': 0.015,
+    #         'render_compass_radius': 0.15, 
+    #         'render_compass_size': 0.03,  
+    #     }
     config = {
             # robot setting
-            'robot_base': 'xmls/fanuc_lr_mate/arm_lrmate_3.xml', 
-            'robot_locations':[(0.0,0.0)],
-            'arm_range': 0.9,
+            'robot_base': 'xmls/point.xml',  
 
             # task setting
-            'task': 'goal',
-            'goal_3D': True,
-            'goal_z_range': [0.5,1.0],
-            'goal_size': 0.3,
-
-            # observation setting
-            'observe_goal_comp': True,  # Observe the goal with a lidar sensor
-            'observe_hazard3Ds': True,  # Observe the vector from agent to hazards
-            'compass_shape': 3,
-            'sensors_obs': ['accelerometer_link_1', 'velocimeter_link_1', 'gyro_link_1', 'magnetometer_link_1',
-                            'accelerometer_link_2', 'velocimeter_link_2', 'gyro_link_2', 'magnetometer_link_2',
-                            'accelerometer_link_3', 'velocimeter_link_3', 'gyro_link_3', 'magnetometer_link_3',
-                            'accelerometer_link_4', 'velocimeter_link_4', 'gyro_link_4', 'magnetometer_link_4',
-                            'accelerometer_link_5', 'velocimeter_link_5', 'gyro_link_5', 'magnetometer_link_5',
-                            'touch_end_effector'],
-            
-            # constraint setting
-            'constrain_hazard3Ds': True,  # Constrain robot from being in hazardous areas
-            'constrain_indicator': False,  # If true, all costs are either 1 or 0 for a given step. If false, then we get dense cost.
-
-            # lidar setting
-            'lidar_num_bins': 10,
-            'lidar_num_bins3D': 6,
-            'lidar_body': ['link_1', 'link_5', 'link_7'],
-            
-            # object setting
-            'hazard3Ds_num': 0,
-            'hazard3Ds_size': 0.2,
-            'hazard3Ds_z_range': [0.5, 1.0],
-            
-            # render setting
-            'render_lidar_radius': 0.08,
-            'render_lidar_size': 0.015,
-            'render_compass_radius': 0.15, 
-            'render_compass_size': 0.03,  
-        }
-    config = {
-            # robot setting
-            'robot_base': 'xmls/unitree_go1/go1.xml',  
-
-            # task setting
-            'task': 'goal',
+            'task': 'defense',
             'goal_size': 0.5,
 
             # observation setting
-            'observe_goal_comp': True,  # Observe the goal with a lidar sensor
+            'observe_robbers': True,  # Observe the goal with a lidar sensor
             'observe_hazards': True,  # Observe the vector from agent to hazards
-            'sensors_obs': ['accelerometer', 'velocimeter', 'gyro', 'magnetometer',
-                            'touch_FR', 'touch_FL', 'touch_RR', 'touch_RL'],
-
+            
             # constraint setting
             'constrain_hazards': True,  # Constrain robot from being in hazardous areas
             'constrain_indicator': False,  # If true, all costs are either 1 or 0 for a given step. If false, then we get dense cost.
@@ -76,6 +82,8 @@ def run_random(env_name):
             # object setting
             'hazards_num': 8,
             'hazards_size': 0.3,
+            'robbers_num': 2,
+            'robbers_size': 0.3,
         }
     config['num_steps']=2000
     config['robot_rot']=0
@@ -102,7 +110,7 @@ def run_random(env_name):
         # assert env.observation_space.contains(obs)
         act = env.action_space.sample()
         # act = np.zeros(act.shape)
-        # act[5] = 10*cnt
+        # act[0] = 100*cnt
         # print(act)
         
         cnt = cnt + 1
@@ -121,18 +129,18 @@ def run_random(env_name):
 
         # if cnt != 0:
         #     key = getkey()
-            # if key == "w":
-            #     act[0] = 1.0
-            # if key == "s":
-            #     act[0] = -1.0
-            # if key == "a":
-            #     act[1] = 1.0
-            # if key == "d":
-            #     act[1] = -1.0
-            # if key == "q":
-            #     act[2] = 1.0
-            # if key == "e":
-            #     act[2] = -1.0  
+        #     if key == "1":
+        #         act[0] = 1.0
+        #     if key == "2":
+        #         act[0] = -1.0
+        #     if key == "3":
+        #         act[1] = 1.0
+        #     if key == "4":
+        #         act[1] = -1.0
+        #     if key == "4":
+        #         act[2] = 1.0
+        #     if key == "6":
+        #         act[2] = -1.0  
         # cnt = 1
         # if cnt  > 100:
         #     act = [1.0, 1.0, -1.0, -1.0]  
@@ -183,7 +191,7 @@ def run_random(env_name):
         # for i in range(6):
         #     joint.append(obs['jointpos_joint_'+str(i + 1)])
         # print(joint)
-        # print('reward', reward)
+        print('reward', reward)
         ep_ret += reward
         a = info['cost']
         # print(info.get('cost', 0))
@@ -195,8 +203,6 @@ def run_random(env_name):
         if cnt > 10000:
             break
         env.render()
-        time.sleep(0.1)
-        # import ipdb;ipdb.set_trace()
     print("##", time.time() - t)
 
 if __name__ == '__main__':
