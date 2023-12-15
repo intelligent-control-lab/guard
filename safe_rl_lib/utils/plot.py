@@ -30,7 +30,7 @@ def plot_data(data, xaxis='Epoch', value="AverageEpRet", condition="Condition1",
     if isinstance(data, list):
         data = pd.concat(data, ignore_index=True)
     sns.set(style="darkgrid", font_scale=1.5, palette='colorblind')
-    sns.tsplot(data=data, time=xaxis, value=value, unit="Unit", condition=condition, ci='sd', **kwargs)
+    ax = sns.lineplot(data=data, x=xaxis, y=value, hue=condition, errorbar='sd', lw=2, **kwargs)
     """
     If you upgrade to any version of Seaborn greater than 0.8.1, switch from 
     tsplot to lineplot replacing L29 with:
@@ -40,8 +40,8 @@ def plot_data(data, xaxis='Epoch', value="AverageEpRet", condition="Condition1",
     Changes the colorscheme and the default legend style, though.
     """
     plt.legend(loc='best').set_draggable(True)
-    #plt.legend(loc='upper center', ncol=3, handlelength=1,
-    #           borderaxespad=0., prop={'size': 13})
+    plt.legend(loc='upper left', ncol=3, handlelength=1,
+              borderaxespad=0., prop={'size': 7})
 
     """
     For the version of the legend used in the Spinning Up benchmarking page, 
@@ -75,7 +75,10 @@ def get_datasets(logdir, condition=None):
                 config_path = open(os.path.join(root,'config.json'))
                 config = json.load(config_path)
                 if 'exp_name' in config:
-                    exp_name = config['exp_name']
+                    if 'apo' in config['exp_name']:
+                        exp_name = config['exp_name'].split('_')[5] + '_'  + config['exp_name'].split('_')[6]
+                    else:
+                        exp_name = config['exp_name'].split('_')[3]
             except:
                 print('No file named config.json')
             condition1 = condition or exp_name or 'exp'

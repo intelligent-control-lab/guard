@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.signal
-from gym.spaces import Box, Discrete
+from gym.spaces import Box
+from gymnasium.spaces import Discrete
 
 import torch
 import torch.nn as nn
@@ -74,7 +75,7 @@ class Actor(nn.Module):
         if act is not None:
             logp_a = self._log_prob_from_distribution(pi, act)
         return pi, logp_a
-    
+
     def _d_kl(self, obs, old_mu, old_log_std, device):
         raise NotImplementedError
 
@@ -88,13 +89,17 @@ class MLPCategoricalActor(Actor):
     def _distribution(self, obs):
         logits = self.logits_net(obs)
         return Categorical(logits=logits)
-
+        
     def _log_prob_from_distribution(self, pi, act):
         return pi.log_prob(act)
     
-    def _d_kl(self, obs, old_mu, old_log_std, device):
-        raise NotImplementedError
-
+    def _d_kl(self, obs, old_logits, device):
+        logits = self.logits_net(obs)
+        tmp_cat = Categorical(logits=logits)
+        all_kls = (torch.exp(old_logits) * (old_logits - tmp_cat.logits)).sum(axis=1)
+        return all_kls.mean()
+        
+        
 
 class MLPGaussianActor(Actor):
 
@@ -106,7 +111,6 @@ class MLPGaussianActor(Actor):
 
     def _distribution(self, obs):
         mu = self.mu_net(obs)
-        # std = torch.clamp(0.01 + 0.99 * torch.exp(self.log_std), max=10)
         std = torch.exp(self.log_std)
         return Normal(mu, std)
 
@@ -118,8 +122,9 @@ class MLPGaussianActor(Actor):
         mu = self.mu_net(obs.to(device))
         log_std = self.log_std 
         
-        d_kl = diagonal_gaussian_kl(old_mu.to(device), old_log_std.to(device), mu, log_std)
+        d_kl = diagonal_gaussian_kl(old_mu.to(device), old_log_std.to(device), mu, log_std) # debug test to see if P old in the front helps
         return d_kl
+
 
 
 class MLPCritic(nn.Module):
@@ -130,7 +135,6 @@ class MLPCritic(nn.Module):
 
     def forward(self, obs):
         return torch.squeeze(self.v_net(obs), -1) # Critical to ensure v has right shape.
-
 
 
 class MLPActorCritic(nn.Module):
@@ -150,10 +154,7 @@ class MLPActorCritic(nn.Module):
             self.pi = MLPCategoricalActor(obs_dim, action_space.n, hidden_sizes, activation).to(self.device)
 
         # build value function
-        self.v  = MLPCritic(obs_dim, hidden_sizes, activation).to(self.device)
-        
-        # build cost value function
-        self.vc  = MLPCritic(obs_dim, hidden_sizes, activation).to(self.device)
+        self.v = MLPCritic(obs_dim, hidden_sizes, activation).to(self.device)
 
     def step(self, obs):
         with torch.no_grad():
@@ -162,8 +163,10 @@ class MLPActorCritic(nn.Module):
             a = pi.sample()
             logp_a = self.pi._log_prob_from_distribution(pi, a)
             v = self.v(obs)
-            vc = self.vc(obs)
-        return a.cpu().numpy(), v.cpu().numpy(), vc.cpu().numpy(), logp_a.cpu().numpy(), pi.mean.cpu().numpy(), torch.log(pi.stddev).cpu().numpy()
+        if isinstance(pi, Normal):
+            return a.cpu().numpy(), v.cpu().numpy(), logp_a.cpu().numpy(), pi.mean.cpu().numpy(), torch.log(pi.stddev).cpu().numpy()
+        elif isinstance(pi, Categorical):
+            return a.cpu().numpy(), v.cpu().numpy(), logp_a.cpu().numpy(), pi.logits.cpu().numpy()
 
     def act(self, obs):
         return self.step(obs)[0]

@@ -164,7 +164,7 @@ def apo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         steps_per_epoch=4000, epochs=50, gamma=0.99, 
         vf_lr=1e-3, train_v_iters=80, lam=0.97, max_ep_len=1000,
         target_kl=0.01, logger_kwargs=dict(), save_freq=10, backtrack_coeff=0.8, backtrack_iters=100, model_save=False, 
-        k=10., omega_1=0.01, omega_2=0.01, atari=None, detailed=False):
+        k=10., omega_1=0.01, omega_2=0.01, atari=None, warmup_ratio=0.1):
     """
     Absolute Policy Optimization
  
@@ -264,8 +264,6 @@ def apo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         omega_2 (float): hyperparameter for H_max. 
         
         atari (str): name of atari game (None if running continuous game).
-        
-        detailed (bool): whether to display detailed computation of square item in variance mean
 
     """
     
@@ -344,15 +342,17 @@ def apo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         tmp_2 = 2*ratio*adv
         mean_var_surr = omega_1 * abs(tmp_1+tmp_2*omega_2).mean()
         
-        if detailed:
+        if epoch < epochs*warmup_ratio:
             kl_div = abs((logp_old - logp).mean().item())
             epsilon = torch.max(disc_adv)
             bias = 4*gamma*kl_div*epsilon/(1-gamma)**2
             min_J_square = mean_surr**2 + 2*val.mean()*mean_surr
             if mean_surr + val.mean() - bias < 0:
                 min_J_square = 0
+            print('detailed')
         else:
             min_J_square = mean_surr**2 + 2*val.mean()*mean_surr
+            print('not detailed')
 
         factor = omega_1 * (1 - gamma**2) / k
         L_ = torch.abs(disc_adv)
@@ -569,8 +569,8 @@ if __name__ == '__main__':
     parser.add_argument('--target_kl', type=float, default=0.02)    
     parser.add_argument('--omega1', type=float, default=0.001)       
     parser.add_argument('--omega2', type=float, default=0.005)       
-    parser.add_argument('--k', '-k', type=float, default=10.5)
-    parser.add_argument('--detailed', '-d', action='store_true', default=False)        
+    parser.add_argument('--k', '-k', type=float, default=10.5)          
+    parser.add_argument('--warmup_ratio', '-w', type=float, default=0.1)   
     parser.add_argument('--atari_name', '-a', type=str, default=None, 
                         choices=['Adventure', 'Pong', 'Seaquest', 'Riverraid', 'Freeway', 'BeamRider', 'Gopher', 'SpaceInvaders',
                                  'AirRaid', 'Assault', 'Qbert', 'Skiing', 'Enduro', 'Breakout', 'Bowling', 'IceHockey', 'KungFuMaster',
@@ -588,11 +588,7 @@ if __name__ == '__main__':
     mpi_fork(args.cpu)  # run parallel code with mpi
     
     if args.atari_name == None:
-        detailed = 'Detailed' if args.detailed else 'NotDetailed'
-        exp_name = args.task + '_' + args.exp_name + '_' + 'kl' + str(args.target_kl)\
-              + '_' + str(args.omega1) + '_' + str(args.omega2)\
-              + '_' + detailed\
-              + '_' + 'epochs' + str(args.epochs)
+        exp_name = args.task + '_' + args.exp_name + '_' + 'kl' + str(args.target_kl) + '_' + 'epochs' + str(args.epochs)
     else:
         import gymnasium
         exp_name = args.atari_name + '_' + args.exp_name + '_' + 'kl' + str(args.target_kl) + '_' + 'epochs' + str(args.epochs)
@@ -605,6 +601,6 @@ if __name__ == '__main__':
         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma, 
         seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
         logger_kwargs=logger_kwargs, model_save=model_save, target_kl=args.target_kl, max_ep_len=args.max_ep_len,
-        k=args.k, omega_1=args.omega1, omega_2=args.omega2, atari=args.atari_name, detailed=args.detailed)
+        k=args.k, omega_1=args.omega1, omega_2=args.omega2, atari=args.atari_name, warmup_ratio=args.warmup_ratio)
     
 

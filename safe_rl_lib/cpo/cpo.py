@@ -14,7 +14,7 @@ from  safe_rl_envs.envs.engine import Engine as  safe_rl_envs_Engine
 from utils.safe_rl_env_config import configuration
 import os.path as osp
 
-device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 EPS = 1e-8
 
 class CPOBuffer:

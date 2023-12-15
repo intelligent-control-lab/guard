@@ -455,7 +455,7 @@ if __name__ == '__main__':
     parser.add_argument('--omega1', type=float, default=0.001)       
     parser.add_argument('--omega2', type=float, default=0.005)       
     parser.add_argument('--k', '-k', type=float, default=10.5)
-    parser.add_argument('--detailed', '-d', action='store_false', default=True) 
+    parser.add_argument('--detailed', '-d', action='store_true', default=False) 
     parser.add_argument('--atari_name', '-a', type=str, default=None, 
                         choices=['Adventure', 'Pong', 'Seaquest', 'Riverraid', 'Freeway', 'BeamRider', 'Gopher', 'SpaceInvaders',
                                  'AirRaid', 'Assault', 'Qbert', 'Skiing', 'Enduro', 'Breakout', 'Bowling', 'IceHockey', 'KungFuMaster',

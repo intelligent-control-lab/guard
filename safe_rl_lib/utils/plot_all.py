@@ -31,9 +31,8 @@ def plot_data(data, title="", xaxis='Epoch', value="AverageEpRet", condition="Co
         data = pd.concat(data, ignore_index=True)
     sns.set(style="darkgrid", font_scale=1.5, palette='colorblind')
     # import ipdb; ipdb.set_trace()
-    plt.figure(figsize=(8,6))
     #sns.tsplot(data=data, time=xaxis, value=value, unit="Unit", condition=condition, ci='sd', **kwargs)
-    ax = sns.lineplot(data=data, x=xaxis, y=value, hue=condition, errorbar='sd', lw=2, **kwargs)
+    ax = sns.lineplot(data=data, x=xaxis, y=value, hue=condition, lw=2, **kwargs)
     """
     If you upgrade to any version of Seaborn greater than 0.8.1, switch from 
     tsplot to lineplot replacing L29 with:
@@ -46,27 +45,7 @@ def plot_data(data, title="", xaxis='Epoch', value="AverageEpRet", condition="Co
     plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
     plt.title(title[:-1].split('/')[-1], fontsize=34)
     plt.legend(loc='upper center', ncol=4, handlelength=1,
-              borderaxespad=0., prop={'size': 16}, frameon=False)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set(xlabel=None, ylabel=None)
-
-    # if title.split('/')[-2] == "Push_Walker" and value == "Reward_Performance":
-    #     plt.ylim(-2.0, 10.5)
-    # elif title.split('/')[-2] == "Push_Walker" and value == "MinEpRet":
-    #     plt.ylim(-11.0, 2.0)
-    # elif title.split('/')[-2] == "Push_Point" and value == "Reward_Performance":
-    #     plt.ylim(-2.0, 12.0)
-    # elif title.split('/')[-2] == "Push_Point" and value == "MinEpRet":
-    #     plt.ylim(-10.0, 10.0)
-    # elif title.split('/')[-2] == "Chase_Walker" and value == "Reward_Performance":
-    #     plt.ylim(-2.5, 1.5)
-    # elif title.split('/')[-2] == "Chase_Walker" and value == "MinEpRet":
-    #     plt.ylim(-10.0, 1.0)
-    
-    if title[:-1].split('/')[-1] == "MontezumaRevenge":
-        plt.xlim(0, 1.343e7)
-        plt.ylim(0, 100)
+              borderaxespad=0., prop={'size': 13}, frameon=False)
 
     """
     For the version of the legend used in the Spinning Up benchmarking page, 
@@ -75,6 +54,13 @@ def plot_data(data, title="", xaxis='Epoch', value="AverageEpRet", condition="Co
     plt.legend(loc='upper center', ncol=6, handlelength=1,
                mode="expand", borderaxespad=0., prop={'size': 13})
     """
+
+    if 'Push_Hopper' in title:
+        plt.ylim(-2, 5)
+    elif 'Push_Point' in title:
+        plt.ylim(-2, 15)
+    elif 'Push_Walker' in title:
+        plt.ylim(-2, 8)
 
     xscale = np.max(np.asarray(data[xaxis])) > 5e3
     if xscale:
@@ -94,24 +80,54 @@ def get_datasets(logdir, condition=None):
     global units
     
     def sort_key(element):
-        if "alphappo" in element[0]:
-            return int(5)
-        elif "appo" in element[0] or "papo" in element[0]:
-            return int(4)
-        elif "vctrpo" in element[0]:
+        if "_trpo_" in element[0]:
             return int(0)
-        elif "trpo" in element[0]:
+        elif "_ppo_" in element[0]:
             return int(1)
-        elif "espo" in element[0]:
-            return int(6)
-        elif "ppo" in element[0]:
+        elif "_a2c_" in element[0]:
             return int(2)
-        elif "vpg" in element[0] or "a2c" in element[0]:
+        elif "_apo_" in element[0]:
             return int(3)
-        elif "vmpo" in element[0]:
+        
+        elif "_apo1_" in element[0]:
+            return int(24)
+        elif "_apo2_" in element[0]:
+            return int(25)
+        elif "_apo_" in element[0]:
+            return int(26)
+        
+        elif "_alphappo_" in element[0]:
+            return int(4)
+        elif "_espo_" in element[0]:
+            return int(5)
+        elif "_vmpo_" in element[0]:
+            return int(6)
+        elif "_papo" in element[0]:
             return int(7)
+        elif "_cpo_" in element[0]:
+            return int(8)
+        elif "_pcpo_" in element[0]:
+            return int(9)
+        elif "_scpo_" in element[0]:
+            return int(10)
+        elif "_lpg_" in element[0]:
+            return int(11)
+        elif "_pdo_" in element[0]:
+            return int(12)
+        elif "_safelayer_" in element[0]:
+            return int(13)
+        elif "_trpofac_" in element[0]:
+            return int(14)
+        elif "_trpoipo_" in element[0]:
+            return int(15)
+        elif "_trpolag_" in element[0]:
+            return int(16)
+        elif "_usl_" in element[0]:
+            return int(17)
+        elif "_espapo_" in element[0]:
+            return int(18)
         else: 
-            return int(8)        
+            return int(19)        
     
     datasets = []
     dirs = [(root, files) for root, _, files in os.walk(logdir)][1:]
@@ -123,22 +139,52 @@ def get_datasets(logdir, condition=None):
                 config_path = open(os.path.join(root,'config.json'))
                 config = json.load(config_path)
                 if 'exp_name' in config:
-                    if "vctrpo" in config['exp_name']:
+                    if "_apo_" in config['exp_name']:
                         exp_name = "APO"
-                    elif "trpo" in config['exp_name']:
-                        exp_name = "TRPO"
-                    elif "alpha" in config['exp_name']:
-                        exp_name = "Alpha-PPO"
-                    elif "appo" in config['exp_name'] or "papo" in config['exp_name']:
+                    elif "_papo" in config['exp_name']:
                         exp_name = "PAPO"
-                    elif "espo" in config['exp_name']:
-                        exp_name = "ESPO"
-                    elif "ppo" in config['exp_name']:
-                        exp_name = "PPO"
-                    elif "vpg" in config['exp_name'] or "a2c" in config['exp_name']:
-                        exp_name = "A2C"
-                    elif "vmpo" in config['exp_name']:
+
+                    elif "_apo1_" in config['exp_name']:
+                        exp_name = "APO1"
+                    elif "_apo2_" in config['exp_name']:
+                        exp_name = "APO2"
+                    elif "_apo_" in config['exp_name']:
+                        exp_name = "APO"
+
+                    elif "_trpofac_" in config['exp_name']:
+                        exp_name = "TRPO-FAC"
+                    elif "_trpoipo_" in config['exp_name']:
+                        exp_name = "TRPO-IPO"
+                    elif "_trpolag_" in config['exp_name']:
+                        exp_name = "TRPO-LAG"
+                    elif "_trpo_" in config['exp_name']:
+                        exp_name = "TRPO"
+                    elif "_vmpo_" in config['exp_name']:
                         exp_name = "V-MPO"
+                    elif "_espo_" in config['exp_name']:
+                        exp_name = "ESPO"
+                    elif "_alphappo_" in config['exp_name']:
+                        exp_name = "Alpha-PPO"
+                    elif "_ppo_" in config['exp_name']:
+                        exp_name = "PPO"
+                    elif "_a2c_" in config['exp_name']:
+                        exp_name = "A2C"
+                    elif "_pcpo_" in config['exp_name']:
+                        exp_name = "PCPO"
+                    elif "_scpo_" in config['exp_name']:
+                        exp_name = "SCPO"
+                    elif "_cpo_" in config['exp_name']:
+                        exp_name = "CPO"
+                    elif "_lpg_" in config['exp_name']:
+                        exp_name = "LPG"
+                    elif "_pdo_" in config['exp_name']:
+                        exp_name = "PDO"
+                    elif "_safelayer_" in config['exp_name']:
+                        exp_name = "SafeLayer"
+                    elif "_usl_" in config['exp_name']:
+                        exp_name = "USL"
+                    elif "_espapo_" in config['exp_name']:
+                        exp_name = "ESAPO"
                     else:
                         exp_name = "Unkonw"
                     
