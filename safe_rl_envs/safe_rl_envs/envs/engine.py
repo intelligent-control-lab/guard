@@ -164,6 +164,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'observe_ctrl': False,  # Observe the previous action
         'observe_freejoint': False,  # Observe base robot free joint
         'observe_com': False,  # Observe the center of mass of the robot
+        'observe_armpos': False,  # Observe the global joint position of arm robots
 
         # Render options
         'render_labels': False,
@@ -453,8 +454,13 @@ class Engine(gym.Env, gym.utils.EzPickle):
     
     @property
     def arm_end_pos(self):
-        ''' Helper to get current robot position '''
+        ''' Helper to get current position of the end effector'''
         return self.data.body('link_' + str(self.arm_link_n)).xpos.copy()
+    
+    @property
+    def armpos(self):
+        ''' Helper to get current positions of all links of the arm robots '''
+        return [self.data.body('link_' + str(i + 1)).xpos.copy() for i in range(self.arm_link_n)]
 
     @property
     def goal_pos(self):
@@ -639,6 +645,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
             obs_space_dict['qvel'] = gym.spaces.Box(-np.inf, np.inf, (self.robot.nv,), dtype=np.float32)
         if self.observe_ctrl:
             obs_space_dict['ctrl'] = gym.spaces.Box(-np.inf, np.inf, (self.robot.nu,), dtype=np.float32)
+        if self.observe_armpos:
+            obs_space_dict['armpos'] = gym.spaces.Box(-np.inf, np.inf, (self.arm_link_n, 3), dtype=np.float32)
         if self.observe_vision:
             width, height = self.vision_size
             rows, cols = height, width
@@ -721,6 +729,20 @@ class Engine(gym.Env, gym.utils.EzPickle):
             placements.update(self.placements_dict_from_object('robber3D'))
 
         self.placements = placements
+
+    def build_mocap_dict(self):
+        id = 0
+        self.mocap_dict = {}
+        for i in range(self.model.nbody):
+            name = self.data.body(i).name
+            if 'mocap' in name:
+                self.mocap_dict[name] = id
+                id += 1
+        return
+
+    def set_mocap_pos(self, name, pos):
+        id = self.mocap_dict[name]
+        self.data.mocap_pos[id] = pos
 
     def seed(self, seed=None):
         ''' Set internal random state seeds '''
@@ -1179,7 +1201,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
             end_pos = self.arm_end_pos
             if np.sqrt(np.sum(np.square(goal_pos - end_pos))) < self.goal_size:
                 return False
-            if np.sqrt(np.sum(np.square(goal_pos[:2]))) > self.arm_range:
+            if np.sqrt(np.sum(np.square(goal_pos))) > self.arm_range:
                 return False
         self.layout['goal'] = goal_pos
         return True
@@ -1224,7 +1246,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
             self.world.rebuild(self.world_config_dict, state=False)
         # Redo a small amount of work, and setup initial goal state
         self.build_goal()
-
+        self.build_mocap_dict()
         # Save last action
         self.last_action = np.zeros(self.action_space.shape)
 
@@ -1603,6 +1625,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
             obs['qvel'] = self.data.qvel.copy()
         if self.observe_ctrl:
             obs['ctrl'] = self.data.ctrl.copy()
+        if self.observe_armpos:
+            obs['armpos'] = np.array(self.armpos)
         if self.observe_vision:
             obs['vision'] = self.obs_vision()
         if self.observation_flatten:
@@ -1745,7 +1769,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 name = f'gremlin{i}'
                 target = np.array([np.sin(phase), np.cos(phase)]) * self.gremlins_travel
                 pos = np.r_[target, [self.gremlins_size]]
-                self.data.set_mocap_pos(name + 'mocap', pos)
+                import ipdb;ipdb.set_trace()
+                self.set_mocap_pos(name + 'mocap', pos)
         if 'arm' in self.robot_base:
             robot_pos = self.arm_end_pos
         else:
@@ -1782,7 +1807,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
                         target = ghost_pos_mocap[:2] + self.ghosts_velocity*direction_norm
                 
                 pos = np.r_[target, 2e-2]
-                self.data.set_mocap_pos(name + 'mocap', pos)
+                self.set_mocap_pos(name + 'mocap', pos)
         if self.ghost3Ds_num:
             ghost3D_pos_last_dict = []
             for i in range(self.ghost3Ds_num):
@@ -1815,7 +1840,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
                         
                 target[2] = np.clip(target[2], self.ghost3Ds_z_range[0], self.ghost3Ds_z_range[1])              
                 pos = target
-                self.data.set_mocap_pos(name + 'mocap', pos)
+                self.set_mocap_pos(name + 'mocap', pos)
         if self.robbers_num: 
             robber_pos_last_dict = []
             for i in range(self.robbers_num):
@@ -1856,7 +1881,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
                         target = robber_pos_mocap[:2] - self.robbers_velocity*direction_norm
                 
                 pos = np.r_[target, 2e-2]
-                self.data.set_mocap_pos(name + 'mocap', pos)
+                self.set_mocap_pos(name + 'mocap', pos)
         if self.robber3Ds_num: # self.constrain_gremlins:
             phase = float(self.data.time)
             robber3D_pos_last_dict = []
@@ -1899,7 +1924,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
                         
                 target[2] = np.clip(target[2], self.robber3Ds_z_range[0], self.robber3Ds_z_range[1])              
                 pos = target
-                self.data.set_mocap_pos(name + 'mocap', pos)
+                self.set_mocap_pos(name + 'mocap', pos)
     def update_layout(self):
         ''' Update layout dictionary with new places of objects '''
         mujoco.mj_forward(self.model, self.data)
@@ -2201,6 +2226,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         if self.viewer is not None and self.reset_viewer:
             self.viewer.close()
             self.viewer = None
+            self.renderer = None
             self.reset_viewer = False
         if self.viewer is None or mode!=self._old_render_mode:
             # Set camera if specified
@@ -2216,7 +2242,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
             self.viewer.user_scn.ngeom = 0
         self.renderer._scene.ngeom = 0
         self.renderer.update_scene(data, self.renderer_cam, self.renderer_opt)
-        self.viewer._hide_overlay = True
 
         # Lidar markers
         if self.render_lidar_markers:
@@ -2293,5 +2318,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         if mode=='human':
             self.viewer.sync()
-        elif mode=='rgb_array':
-            return self.renderer.render()[:, :, [2, 1, 0]]
+        # elif mode=='rgb_array':
+
+        return self.renderer.render()[:, :, [2, 1, 0]]

@@ -616,13 +616,13 @@ def cpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
         # Log info about epoch
         logger.log_tabular('Epoch', epoch)
-        logger.log_tabular('EpRet', with_min_and_max=True)
+        logger.log_tabular('EpRet', average_only=True)
         logger.log_tabular('EpLen', average_only=True)
-        logger.log_tabular('EpCostRet', with_min_and_max=True)
-        logger.log_tabular('EpCost', with_min_and_max=True)
+        logger.log_tabular('EpCostRet', average_only=True)
+        logger.log_tabular('EpCost',  average_only=True)
         logger.log_tabular('CumulativeCost', cumulative_cost)
         logger.log_tabular('CostRate', cost_rate)
-        logger.log_tabular('VVals', with_min_and_max=True)
+        logger.log_tabular('VVals',  average_only=True)
         logger.log_tabular('TotalEnvInteracts', (epoch+1)*steps_per_epoch)
         logger.log_tabular('LossPi', average_only=True)
         logger.log_tabular('LossV', average_only=True)

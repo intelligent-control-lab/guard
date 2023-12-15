@@ -13,7 +13,7 @@ from utils.safe_rl_env_config import configuration
 import os.path as osp
 import cv2
 import matplotlib.pyplot as plt
-from mujoco_py import GlfwContext
+
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -48,17 +48,23 @@ def replay(env_fn, model_path=None, video_name=None, max_epoch=1):
     ac = torch.load(model_path)
     
     # evaluate the model 
+    cur_array = []
     while True:
         time_step += 1
+        
         if d:
-            epoch += 1
+            print(epoch)
             print('Episode Return: %.3f'%(ep_ret))
+            if ep_ret > 0:
+                epoch += 1
+                
+                video_array.extend(cur_array)
             if epoch == max_epoch:
                 env.close()
                 break
             ep_ret = 0
             o = env.reset()
-        
+            cur_array = []
         try:
             a, v, logp, _, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
         except:
@@ -67,12 +73,14 @@ def replay(env_fn, model_path=None, video_name=None, max_epoch=1):
         
 
         next_o, r, d, _ = env.step(a)
-        
+        if time_step > 500:
+            d = 1
+            time_step = 0
         # Update obs (critical!)
         o = next_o
 
-        img_array = env.render(mode='rgb_array')
-        video_array.append(img_array)
+        img_array = env.render(mode='human')
+        cur_array.append(img_array)
 
         ep_ret += r
 
@@ -84,7 +92,7 @@ def replay(env_fn, model_path=None, video_name=None, max_epoch=1):
     if not existence:
         os.makedirs(out_path)
     video_writer = cv2.VideoWriter(os.path.join(out_path,f'{video_name}.mp4'),
-                                cv2.VideoWriter_fourcc(*'FMP4'), fps, dsize)
+                                cv2.VideoWriter_fourcc(*'mp4v'), fps, dsize)
 
     for frame in video_array:
         resized = cv2.resize(frame, dsize=dsize)
