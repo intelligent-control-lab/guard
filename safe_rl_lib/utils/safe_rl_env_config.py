@@ -346,6 +346,53 @@ def configuration_list(task):
             'ghosts_safe_dist': 1.5,
         }
 
+    if task == "Goal_ArmFanuc_2Hazards":
+        config = {
+            # robot setting
+            'robot_base': 'xmls/fanuc_lr_mate/arm_lrmate.xml', 
+            'robot_locations':[(0.0,0.0)],
+            'arm_range': 1.0,
+
+            # task setting
+            'task': 'goal',
+            'goal_3D': True,
+            'goal_z_range': [0.5,1.0],
+            'goal_size': 0.2,
+
+            # observation setting
+            'observe_goal_comp': True,  # Observe the goal with a lidar sensor
+            'observe_hazard3Ds': True,  # Observe the vector from agent to hazards
+            'compass_shape': 3,
+            'sensors_obs': ['accelerometer_link_1', 'velocimeter_link_1', 'gyro_link_1', 'magnetometer_link_1',
+                            'accelerometer_link_2', 'velocimeter_link_2', 'gyro_link_2', 'magnetometer_link_2',
+                            'accelerometer_link_3', 'velocimeter_link_3', 'gyro_link_3', 'magnetometer_link_3',
+                            'accelerometer_link_4', 'velocimeter_link_4', 'gyro_link_4', 'magnetometer_link_4',
+                            'accelerometer_link_5', 'velocimeter_link_5', 'gyro_link_5', 'magnetometer_link_5',
+                            'accelerometer_link_6', 'velocimeter_link_6', 'gyro_link_6', 'magnetometer_link_6',
+                            'accelerometer_link_7', 'velocimeter_link_7', 'gyro_link_7', 'magnetometer_link_7',
+                            'touch_end_effector'],
+            
+            # constraint setting
+            'constrain_hazard3Ds': True,  # Constrain robot from being in hazardous areas
+            'constrain_indicator': False,  # If true, all costs are either 1 or 0 for a given step. If false, then we get dense cost.
+
+            # lidar setting
+            'lidar_num_bins': 10,
+            'lidar_num_bins3D': 6,
+            'lidar_body': ['link_1', 'link_3', 'link_5', 'link_7'],
+            
+            # object setting
+            'hazard3Ds_num': 2,
+            'hazard3Ds_size': 0.2,
+            'hazard3Ds_z_range': [0.5, 1.0],
+            
+            # render setting
+            'render_lidar_radius': 0.08,
+            'render_lidar_size': 0.015,
+            'render_compass_radius': 0.15, 
+            'render_compass_size': 0.03,  
+        }
+
     if task == "Goal_Arm3_8Hazards":
         config = {
             # robot setting

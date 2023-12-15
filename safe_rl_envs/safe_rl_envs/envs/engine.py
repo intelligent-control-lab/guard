@@ -2295,38 +2295,3 @@ class Engine(gym.Env, gym.utils.EzPickle):
             self.viewer.sync()
         elif mode=='rgb_array':
             return self.renderer.render()[:, :, [2, 1, 0]]
-
-    def adaptive_safety_index(self, k=2, sigma=0.04, n=2):
-        '''
-        synthesis the safety index that ensures the valid solution 
-        '''
-        if self.constrain_hazards:
-            vel_vec = self.data.get_body_xvelp('robot')[0:2]
-            robot_pos = self.world.robot_pos()
-            # h_pos = self.hazards_pos
-            robot_to_hazard_direction = (self.hazards_pos - robot_pos)[:,0:2]
-            h_dist = np.linalg.norm(robot_to_hazard_direction, axis=1)
-            dotd = -np.dot(robot_to_hazard_direction, vel_vec) / h_dist
-            # d = h_dist
-            phi_list = sigma + self.hazards_size**n - h_dist**n - k*dotd
-            phi = np.max(phi_list)   
-            return phi 
-            
-        elif self.constrain_pillars:
-
-            vel_vec = self.data.get_body_xvelp('robot')[0:2]
-            robot_pos = self.world.robot_pos()
-            # h_pos = self.hazards_pos
-            robot_to_pillar_direction = (self.pillars_pos - robot_pos)[:,0:2]
-            
-            h_dist = np.linalg.norm(robot_to_pillar_direction, axis=1)
-            dotd = -np.dot(robot_to_pillar_direction, vel_vec) / h_dist
-            # d = h_dist
-            # phi_list = sigma + (self.pillars_size + self.robot_keepout -0.3)**n - h_dist**n - k*dotd
-            phi_list = sigma + (self.pillars_size+0.1)**n - h_dist**n - k*dotd
-            phi = np.max(phi_list)
-            
-            return phi 
-
-        else:
-            raise NotImplementedError  

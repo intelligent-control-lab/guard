@@ -15,6 +15,7 @@ from utils.safe_rl_env_config import configuration
 import os.path as osp
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 EPS = 1e-8
 
 class TRPOBuffer:
@@ -423,6 +424,7 @@ def trpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             print('reset environment is wrong, try next reset')
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
+        epoch_t = time.time()
         for t in range(local_steps_per_epoch):
             if isinstance(o, tuple):
                 o = o[0]
