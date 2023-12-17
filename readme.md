@@ -70,16 +70,6 @@ Install environment:
 conda create --name venv --file requirements.txt
 ```
 
-- ![#c5f015](https://placehold.co/15x15/c5f015/c5f015.png) Note that if error reports while installing conda environment. You may choose to first comment the unsupported package, then use `pip install` to install those packages manually. 
-
-
-Afterwards, Install [mujoco_py](https://github.com/openai/mujoco-py), see the mujoco_py documentation for details. Note that mujoco_py **requires Python 3.6 or greater**.
-
-- ![#c5f015](https://placehold.co/15x15/c5f015/c5f015.png) Due to the recent update of Cython, please update cython version after installation of mujoco-py, or error will be reported when importing mujoco.
-```
-pip install "cython<3"
-```
-
 Lastly, install `safe_rl_envs` by:
 
 ```
