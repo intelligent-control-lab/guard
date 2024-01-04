@@ -1948,11 +1948,11 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # Set action
         if "drone" in self.robot_base:
             action = np.clip(action, -1.0, 1.0)
-            mass = self.model.body_mass[self.model.body_name2id('robot')]
-            mass += self.model.body_mass[self.model.body_name2id('p1')]
-            mass += self.model.body_mass[self.model.body_name2id('p2')]
-            mass += self.model.body_mass[self.model.body_name2id('p3')]
-            mass += self.model.body_mass[self.model.body_name2id('p4')]
+            mass = self.model.body_mass[self.data.body('robot').id]
+            mass += self.model.body_mass[self.data.body('p1').id]
+            mass += self.model.body_mass[self.data.body('p2').id]
+            mass += self.model.body_mass[self.data.body('p3').id]
+            mass += self.model.body_mass[self.data.body('p4').id]
             robot_pos = self.world.robot_pos()
             R = self.world.robot_mat()
             f = mass * 9.81
@@ -1966,7 +1966,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 force = np.array(force).reshape(3,1)
                 force = R@force
                 force = [force[i,0] for i in range(3)]
-                self.data.xfrc_applied[self.model.body_name2id(propeller),:] = force + torque
+                self.data.xfrc_applied[self.data.body(propeller).id,:] = force + torque
         else:
             action_range = self.model.actuator_ctrlrange
             # action_scale = action_range[:,1] - action_range[:, 0]

@@ -393,7 +393,7 @@ class World:
 
     def body_com(self, name):
         ''' Get the center of mass of a named body in the simulator world reference frame '''
-        return self.data.subtree_com[self.model.body_name2id(name)].copy()
+        return self.data.subtree_com[self.data.body(name).id].copy()
 
     def body_pos(self, name):
         ''' Get the position of a named body in the simulator world reference frame '''
