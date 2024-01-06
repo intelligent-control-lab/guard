@@ -5,7 +5,7 @@ Paper link: [GUARD: A Safe Reinforcement Learning Benchmark](https://arxiv.org/a
 GUARD is a highly customizable generalized benchmark with a wide variety of RL agents, tasks, and safety constraint specifications.
 GUARD comprehensively covers state-of-the-art safe RL algorithms with self-contained implementations. 
 
-We are implementing a GPU accelerated GUARD version called GUARD-X (To Be Released on 2/5/2024)
+**We are implementing a GPU accelerated GUARD version called GUARD-X (To Be Released on 2/5/2024)**
 
 GUARD is composed of two main components: GUARD Safe RL library and GUARD testing suite.
 Our implementation is partially inspired by [safety-gym](https://github.com/openai/safety-gym) and [spinningup](https://github.com/openai/spinningup).
