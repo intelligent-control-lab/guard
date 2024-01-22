@@ -107,7 +107,6 @@ class MLPGaussianActor(Actor):
 
     def _distribution(self, obs):
         mu = self.mu_net(obs)
-        # std = torch.clamp(0.01 + 0.99 * torch.exp(self.log_std), max=10)
         std = torch.exp(self.log_std)
         return Normal(mu, std)
 
@@ -149,7 +148,7 @@ class MLPActorCritic(nn.Module):
     def __init__(self, observation_space, action_space, 
                  hidden_sizes=(64,64), activation=nn.Tanh):
         super().__init__()
-        self.device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         obs_dim = observation_space.shape[0]
 
@@ -182,18 +181,3 @@ class MLPActorCritic(nn.Module):
         return self.step(obs)[0]
     
     
-# predict state-wise \lamda(s)
-# class MultiplerNet(nn.Module):
-#     def __init__(self, state_dim):
-#         super(MultiplerNet, self).__init__()
-
-#         self.l1 = nn.Linear(state_dim, 64)
-#         self.l2 = nn.Linear(64, 64)
-#         self.l3 = nn.Linear(64, 1)
-
-        
-#     def forward(self, state):
-#         a = F.relu(self.l1(state))
-#         a = F.relu(self.l2(a))
-#         #return F.relu(self.l3(a))
-#         return F.softplus(self.l3(a)) # lagrangian multipliers can not be negative

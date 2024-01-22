@@ -14,7 +14,7 @@ from  safe_rl_envs.envs.engine import Engine as  safe_rl_envs_Engine
 from utils.safe_rl_env_config import configuration
 import os.path as osp
 
-device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 EPS = 1e-8
 
 class TRPOIPOBuffer:
@@ -310,11 +310,9 @@ def trpoipo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         """
         Return the sample average KL divergence between old and new policies
         """
-        obs, act, adv, logp_old, mu_old, logstd_old = data['obs'], data['act'], data['adv'], data['logp'], data['mu'], data['logstd']
+        obs, mu_old, logstd_old = data['obs'], data['act'], data['adv'], data['logp'], data['mu'], data['logstd']
         
         # Average KL Divergence  
-        pi, logp = cur_pi(obs, act)
-        # average_kl = (logp_old - logp).mean()
         average_kl = cur_pi._d_kl(
             torch.as_tensor(obs, dtype=torch.float32),
             torch.as_tensor(mu_old, dtype=torch.float32),
@@ -331,7 +329,6 @@ def trpoipo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         
         # Policy loss 
         pi, logp = cur_pi(obs, act)
-        # loss_pi = -(logp * adv).mean()
         ratio = torch.exp(logp - logp_old)
         loss_pi = -(ratio * adv).mean()
         
@@ -438,7 +435,6 @@ def trpoipo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     # Prepare for interaction with environment
     start_time = time.time()
-    # o, ep_ret, ep_len = env.reset(), 0, 0
     while True:
         try:
             o, ep_ret, ep_len = env.reset(), 0, 0
@@ -490,7 +486,6 @@ def trpoipo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 if terminal:
                     # only save EpRet / EpLen / EpCost if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len, EpCost=ep_cost)
-                # o, ep_ret, ep_len = env.reset(), 0, 0
                 while True:
                     try:
                         o, ep_ret, ep_len = env.reset(), 0, 0

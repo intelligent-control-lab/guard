@@ -106,7 +106,6 @@ class MLPGaussianActor(Actor):
 
     def _distribution(self, obs):
         mu = self.mu_net(obs)
-        # std = 0.01 + 0.99 * torch.exp(self.log_std)
         std = torch.exp(self.log_std)
         return Normal(mu, std)
 
@@ -151,7 +150,6 @@ class C_Critic(nn.Module):
             assert len(obs.shape) == len(act.shape)
             return torch.dot(g, act)
         # (B,1,A)x(B,A,1) -> (B,1,1) -> (B,1)
-        # return torch.bmm(g.unsqueeze(1),act.unsqueeze(2)).view(1,-1)
         return torch.flatten(torch.bmm(g.unsqueeze(1),act.unsqueeze(2)))
     
     # Get the corrected action 

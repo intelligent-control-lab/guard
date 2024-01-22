@@ -14,7 +14,7 @@ from  safe_rl_envs.envs.engine import Engine as  safe_rl_envs_Engine
 from utils.safe_rl_env_config import configuration
 import os.path as osp
 
-device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 EPS = 1e-8
 
 class PCPOBuffer:
@@ -311,11 +311,9 @@ def pcpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         """
         Return the sample average KL divergence between old and new policies
         """
-        obs, act, adv, logp_old, mu_old, logstd_old = data['obs'], data['act'], data['adv'], data['logp'], data['mu'], data['logstd']
+        obs, mu_old, logstd_old = data['obs'], data['act'], data['adv'], data['logp'], data['mu'], data['logstd']
         
         # Average KL Divergence  
-        pi, logp = cur_pi(obs, act)
-        # average_kl = (logp_old - logp).mean()
         average_kl = cur_pi._d_kl(
             torch.as_tensor(obs, dtype=torch.float32),
             torch.as_tensor(mu_old, dtype=torch.float32),
@@ -345,7 +343,6 @@ def pcpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         # Policy loss 
         pi, logp = cur_pi(obs, act)
         ratio = torch.exp(logp - logp_old)
-        # loss_pi = -(ratio * adv).mean()
         loss_pi = (ratio * adv).mean() # the gradient of PCPO requires is for (maximize J) instead of (minimize -J)
         
         # Useful extra info
@@ -410,8 +407,7 @@ def pcpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         # core calculation for PCPO
         Hinv_g   = cg(Hx, g)             # Hinv_g = H \ g        
         approx_g = Hx(Hinv_g)           # g
-        # q        = np.clip(Hinv_g.T @ approx_g, 0.0, None)  # g.T / H @ g
-        q        = Hinv_g.T @ approx_g
+        q        = Hinv_g.T @ approx_g  # g.T / H @ g
         Linv_b = cg(Hx, b) if kl_proj else b
         approx_b = Hx(Linv_b) if kl_proj else b # b
         

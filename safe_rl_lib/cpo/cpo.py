@@ -314,11 +314,8 @@ def cpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         """
         Return the sample average KL divergence between old and new policies
         """
-        obs, act, adv, logp_old, mu_old, logstd_old = data['obs'], data['act'], data['adv'], data['logp'], data['mu'], data['logstd']
+        obs, mu_old, logstd_old = data['obs'], data['act'], data['adv'], data['logp'], data['mu'], data['logstd']
         
-        # Average KL Divergence  
-        pi, logp = cur_pi(obs, act)
-        # average_kl = (logp_old - logp).mean()
         average_kl = cur_pi._d_kl(
             torch.as_tensor(obs, dtype=torch.float32),
             torch.as_tensor(mu_old, dtype=torch.float32),
@@ -411,9 +408,8 @@ def cpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         
         # core calculation for CPO
         Hinv_g   = cg(Hx, g)             # Hinv_g = H \ g        
-        approx_g = Hx(Hinv_g)           # g
-        # q        = np.clip(Hinv_g.T @ approx_g, 0.0, None)  # g.T / H @ g
-        q        = Hinv_g.T @ approx_g
+        approx_g = Hx(Hinv_g)            # g
+        q        = Hinv_g.T @ approx_g   # g.T / H @ g
         
         # solve QP
         # decide optimization cases (feas/infeas, recovery)
@@ -467,11 +463,9 @@ def cpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             f_a = lambda lam : -0.5 * (A / (lam+EPS) + B * lam) - r*c/(s+EPS)
             f_b = lambda lam : -0.5 * (q / (lam+EPS) + 2 * target_kl * lam)
             lam = lam_a if f_a(lam_a) >= f_b(lam_b) else lam_b
-            # nu = max(0, lam * c - r) / (np.clip(s,0.,None)+EPS)
             nu = max(0, lam * c - r) / (s+EPS)
         else:
             lam = 0
-            # nu = np.sqrt(2 * target_kl / (np.clip(s,0.,None)+EPS))
             nu = np.sqrt(2 * target_kl / (s+EPS))
             
         # normal step if optim_case > 0, but for optim_case =0,
