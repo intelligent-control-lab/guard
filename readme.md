@@ -5,8 +5,6 @@ Paper link: [GUARD: A Safe Reinforcement Learning Benchmark](https://arxiv.org/a
 GUARD is a highly customizable generalized benchmark with a wide variety of RL agents, tasks, and safety constraint specifications.
 GUARD comprehensively covers state-of-the-art safe RL algorithms with self-contained implementations. 
 
-**We are implementing a GPU accelerated GUARD version called GUARD-X (To Be Released on 2/5/2024)**
-
 GUARD is composed of two main components: GUARD Safe RL library and GUARD testing suite.
 Our implementation is partially inspired by [safety-gym](https://github.com/openai/safety-gym) and [spinningup](https://github.com/openai/spinningup).
 
@@ -243,21 +241,49 @@ We encourage users to submit issues for bugs, feature requests, or general feedb
 
 ### Expansion
 
-#### New Features
+**Realistic Robot Options:**
+With the upgraded Mujoco3 Engine, we aim to add a variety of [realistic robot options](https://mujoco.readthedocs.io/en/stable/models.html) for both moving and manipulating robots. This improvement will enable realistic simulations, paving the way for safe real-world robot experiments through simulation-to-reality transfer.
 
-We welcome contributions that introduce new features or improvements to existing ones. If you have ideas for enhancing Safety Gym, please open an issue to discuss the proposed changes before submitting a pull request.
+**Unconstrained RL and Safe RL Library:** 
+To ensure that the GUARD algorithm library remains aligned with the latest advancements in safe RL algorithms, our objective is to expand its inclusion of more on-policy unconstrained RL and safe RL capabilities. This expansion aims to position the GUARD algorithm library as a comprehensive research platform catering to both the safe RL and unconstrained RL communities. The planned implementations encompass the following algorithms:
+- ***Unconstrained RL:***
+  - [Absolute Policy Optimization (APO)](https://arxiv.org/pdf/2310.13230.pdf) 
+  - [Proximal Policy Optimization (PPO)](https://arxiv.org/abs/1707.06347)
+  - [Asynchronous Actor-critic (A2C)](https://arxiv.org/abs/1602.01783?context=cs.LG)
+  - [V-MPO](https://arxiv.org/abs/1909.12238)
+  - [ESPO](https://arxiv.org/abs/2202.00079)
+  - [Alpha-PPO](https://www.sciencedirect.com/science/article/pii/S0925231223001467)
 
-#### Community Involvement
+- ***End-to-End Safe RL:***
+  - [Primal-Dual Optimization (PDO)](https://arxiv.org/abs/1512.01629)
+  - [First Order Constrained Optimization in Policy Space (FOCOPS) ](https://arxiv.org/pdf/2002.06506.pdf)
 
-We aim to build a vibrant community around Safety Gym. Contributions from the community, including code submissions, bug reports, and feature requests, are crucial for the project's growth. Engage with the community through discussions, forums, and collaborative efforts.
 
-#### Documentation
+- ***Hierarchical Safe RL:***
+  - [Lyapunov-based Safe Policy Optimization (LPG)](https://arxiv.org/abs/1901.10031)
+  - [Uncertainty-Aware Implicit Safe Set Algorithm (UAISSA)](https://arxiv.org/abs/2210.01041)
+  - [Neural Barrier Certificate (TRPO-Barrier)](https://ieeexplore.ieee.org/abstract/document/10023989) 
 
-Maintaining comprehensive and up-to-date documentation is key to the usability of Safety Gym. We encourage contributors to document new features and help improve existing documentation.
 
-### Roadmap
+**GUARD-X: The GPU accelerated GUARD**
+ Leveraging the latest [Mujoco XLA](https://mujoco.readthedocs.io/en/stable/mjx.html), we can significantly enhances GUARD training efficiency through parallel simulation on GPU. We plan to create a GPU accelerated The updated version, called GUARD-X, maintains synchronization with Mujoco Mjx, ensuring continual compatibility and performance enhancements. Here is the overall structure of GUARD-X 
+ ![GUARD-X](images/GUARDX.png)
+ 
+The configurable tasks from GUARD will be seamlessly integrated into GUARD-X. With GUARD-X, the computational efficiency of RL training is substantially accelerated, surpassing Safety Gym by hundreds of times. ![training](images/Speed.png)
 
-We have outlined a roadmap for the future development of Safety Gym, which can be found in the [ROADMAP.md](link_to_your_roadmap_file). This document provides insights into upcoming features, milestones, and goals for the project.
+
+### Expansion Timeline
+
+
+**Planned Expansion Timeline**
+
+| Task               | Start Date | End Date   | Status          |
+|--------------------|------------|------------|-----------------|
+| Realistic Robot Options          | 2024-01-10 | 2024-03-15 | In Progress     |
+| Expanded Unconstrained and Constrained RL Library    | 2024-01-14 | 2024-04-01 | In Progress    |
+| GUARD-X        | 2023-12-15 | 2024-04-01 | In Progress         |
+
+**Note:** These timelines are tentative and subject to change based on available resources and community feedback.
 
 ### Feedback and Suggestions
 
