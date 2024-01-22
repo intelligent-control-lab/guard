@@ -394,20 +394,20 @@ https://mujoco.readthedocs.io/en/stable/XMLreference.html  -->
 </mujoco>
 
 ```
-
+---
 ## Contributing to GUARD
 
 Welcome to GUARD! We appreciate your interest in contributing to this project. Whether you want to report a bug, suggest a feature, or contribute code, please follow the guidelines outlined below.
 
-### Issues and Bugs
+### 1. Issues and Bugs
 
 If you encounter any issues or find a bug, please open an issue on the [issue tracker](https://github.com/intelligent-control-lab/guard/issues). When reporting a bug, include a detailed description, steps to reproduce, and your system configuration.
 
-### Feature Requests
+### 2. Feature Requests
 
 If you have a feature request, please open an issue on the [issue tracker](https://github.com/intelligent-control-lab/guard/issues). Clearly describe the new feature you'd like to see and why it would be valuable.
 
-### Pull Requests
+### 3. Pull Requests
 
 We welcome contributions! If you'd like to contribute code, follow these steps:
 
@@ -417,7 +417,7 @@ We welcome contributions! If you'd like to contribute code, follow these steps:
 4. Write clear and concise commit messages explaining your changes.
 5. Open a pull request, linking to any relevant issues and providing a detailed description of your changes.
 
-### Coding Guidelines and Style of Conventions
+### 4. Coding Guidelines and Style of Conventions
 
 - Follow the [coding style guide](CODE_OF_CONDUCT.md) of the project.
 - Adhere to [PEP 8 style guidelines](https://peps.python.org/pep-0008/) for Python code.
@@ -438,23 +438,23 @@ def func2(arg1, arg2)
 - Write clear and concise commit messages.
 
 
-### Code Reviews
+### 5. Code Reviews
 - All pull requests will be reviewed by project maintainers.
 - Be prepared to address any feedback or questions from reviewers.
 
-### Additional Tips
+### 6. Additional Tips
 - Before starting work on a major feature, discuss it with the maintainers first to ensure it aligns with the project's goals.
 - Break down large changes into smaller, more manageable pull requests.
 - Be patient and respectful during the code review process.
 - Thank you for your interest in contributing to GUARD!
 
 
-
+---
 ## Maintaining and Expanding GUARD
 
 To ensure the long-term maintenance and growth of this code repository, we have outlined the following plan:
 
-### Maintenance
+### 1. Maintenance
 
 **Regular Updates:**
 We are committed to keeping GUARD up-to-date with the latest advancements in (i) [Mujoco Simulation Engine](https://mujoco.readthedocs.io/en/stable/overview.html); (ii) [Pytorch Toolbox](https://pytorch.org/) and addressing any potential issues. Regular updates will include bug fixes, feature improvements, and compatibility with new dependencies.
@@ -463,7 +463,7 @@ We are committed to keeping GUARD up-to-date with the latest advancements in (i)
 We encourage users to submit issues for bugs, feature requests, or general feedback. Our team will actively monitor the [issue tracker](https://github.com/intelligent-control-lab/guard/issues) and respond promptly to address reported problems or discuss proposed enhancements.
 
 
-### Expansion
+### 2. Expansion
 
 **Realistic Robot Options:**
 With the upgraded Mujoco3 Engine, we aim to add a variety of [realistic robot options](https://mujoco.readthedocs.io/en/stable/models.html) for both moving and manipulating robots. This improvement will enable realistic simulations, paving the way for safe real-world robot experiments through simulation-to-reality transfer.
@@ -496,7 +496,7 @@ To ensure that the GUARD algorithm library remains aligned with the latest advan
 The configurable tasks from GUARD will be seamlessly integrated into GUARD-X. With GUARD-X, the computational efficiency of RL training is substantially accelerated, surpassing Safety Gym by hundreds of times. ![training](images/Speed.png)
 
 
-### Expansion Timeline
+### 3. Expansion Timeline
 
 
 **Planned Expansion Timeline**
@@ -509,7 +509,7 @@ The configurable tasks from GUARD will be seamlessly integrated into GUARD-X. Wi
 
 **Note:** These timelines are tentative and subject to change based on available resources and community feedback.
 
-### Feedback and Suggestions
+### 4. Feedback and Suggestions
 
 We welcome feedback and suggestions on how we can improve this maintenance and expansion plan. Feel free to open an issue to share your thoughts and ideas.
 
