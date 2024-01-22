@@ -243,6 +243,13 @@ We encourage users to submit issues for bugs, feature requests, or general feedb
 
 ### Expansion
 
+#### Other Environments
+
+You can easily change the algorithm runtime environment to another environment library that **supports the gym interface** by following these steps：
+
+- Add necessary paramaters for build external environment to parameter `arg` in main. (Optional) 
+- Import the desired environment and initialize it in `create_env` function.
+
 #### New Features
 
 We welcome contributions that introduce new features or improvements to existing ones. If you have ideas for enhancing Safety Gym, please open an issue to discuss the proposed changes before submitting a pull request.
@@ -270,7 +277,7 @@ We welcome feedback and suggestions on how we can improve this maintenance and e
 ```
 @article{zhao2023guard,
   title={GUARD: A Safe Reinforcement Learning Benchmark},
-  author={Zhao, Weiye and Chen, Rui and Sun, Yifan and Liu, Ruixuan and Wei, Tianhao and Liu, Changliu},
+  author={Zhao, Weiye and Chen, Rui and Sun, Yifan and Li, Feihan and Liu, Ruixuan and Wei, Tianhao and Liu, Changliu},
   journal={arXiv preprint arXiv:2305.13681},
   year={2023}
 }

@@ -489,6 +489,8 @@ def pdo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     while True:
         try:
             o, ep_ret, ep_len = env.reset(), 0, 0
+            if isinstance(o, tuple):
+                o = o[0]
             break
         except:
             print('reset environment is wrong, try next reset')
@@ -502,7 +504,12 @@ def pdo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             a, v, vc, logp, mu, logstd = ac.step(torch.as_tensor(o, dtype=torch.float32))
 
             try: 
-                next_o, r, d, info = env.step(a)
+                rets = env.step(a)
+                if len(rets) == 4:
+                    next_o, r, d, info = rets
+                else:
+                    next_o, r, d1, d2, info = rets
+                    d = d1 or d2
                 assert 'cost' in info.keys()
             except: 
                 # simulation exception discovered, discard this episode 
@@ -542,6 +549,8 @@ def pdo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 while True:
                     try:
                         o, ep_ret, ep_len = env.reset(), 0, 0
+                        if isinstance(o, tuple):
+                            o = o[0]
                         break
                     except:
                         print('reset environment is wrong, try next reset')
@@ -581,7 +590,12 @@ def pdo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         
         
 def create_env(args):
+    '''
+    Build the environment from the configuration file
+    '''
     env =  safe_rl_envs_Engine(configuration(args.task))
+    # You can also use other environment with standard gym interfaces
+    # For futher details, please refer to https://www.gymlibrary.dev/api/core/
     return env
 
 if __name__ == '__main__':
