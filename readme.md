@@ -177,6 +177,7 @@ python utils/plot.py comparison/ --title <title name> --reward --cost
 
 \<title name\> can be anything that describes the current comparison (e.g., "all end-to-end methods").
 
+---
 ## Build on top of GUARD
 
 ### Introduction to the structure of Engine
