@@ -62,7 +62,7 @@ def run_random(env_name):
     #     }
     config = {
             # robot setting
-            'robot_base': 'xmls/point.xml',  
+            'robot_base': 'xmls/ant.xml',  
 
             # task setting
             'task': 'defense',
@@ -71,7 +71,10 @@ def run_random(env_name):
             # observation setting
             'observe_robbers': True,  # Observe the goal with a lidar sensor
             'observe_hazards': True,  # Observe the vector from agent to hazards
-            
+            'sensors_obs': ['accelerometer', 'velocimeter', 'gyro', 'magnetometer',
+                            'touch_ankle_1a', 'touch_ankle_2a', 'touch_ankle_3a', 'touch_ankle_4a',
+                            'touch_ankle_1b', 'touch_ankle_2b', 'touch_ankle_3b', 'touch_ankle_4b'],
+
             # constraint setting
             'constrain_hazards': True,  # Constrain robot from being in hazardous areas
             'constrain_indicator': False,  # If true, all costs are either 1 or 0 for a given step. If false, then we get dense cost.

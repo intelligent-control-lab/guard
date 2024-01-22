@@ -6,13 +6,10 @@ import numpy as np
 from PIL import Image
 from copy import deepcopy
 from collections import OrderedDict
-# import mujoco_py
-# from mujoco_py import MjViewer, MujocoException, const, MjRenderContextOffscreen
 import mujoco
 import mujoco.viewer
 from safe_rl_envs.envs.world import World, Robot
 
-import sys
 from .engine_utils import *
 
 
@@ -38,7 +35,6 @@ COLOR_ROBBER3D = np.array([1, 1, 0.5, 1])
 # Groups are a mujoco-specific mechanism for selecting which geom objects to "see"
 # We use these for raycasting lidar, where there are different lidar types.
 # These work by turning "on" the group to see and "off" all the other groups.
-# See obs_lidar_natural() for more.
 GROUP_GOAL = 0
 GROUP_BOX = 1
 GROUP_BUTTON = 1
@@ -53,8 +49,6 @@ GROUP_GHOST = 3
 GROUP_GHOST3D = 3
 GROUP_ROBBER = 5
 GROUP_ROBBER3D = 5
-
-
 
 # Constant for origin of world
 ORIGIN_COORDINATES = np.zeros(3)
@@ -73,12 +67,12 @@ def theta2vec(theta):
     return np.array([np.cos(theta), np.sin(theta), 0.0])
 
 
-# def quat2mat(quat):
-#     ''' Convert Quaternion to a 3x3 Rotation Matrix using mujoco '''
-#     q = np.array(quat, dtype='float64')
-#     m = np.zeros(9, dtype='float64')
-#     mujoco_py.functions.mju_quat2Mat(m, q)
-#     return m.reshape((3,3))
+def quat2mat(quat):
+    ''' Convert Quaternion to a 3x3 Rotation Matrix using mujoco '''
+    q = np.array(quat, dtype='float64')
+    m = np.zeros(9, dtype='float64')
+    mujoco.mju_quat2Mat(m, q)
+    return m.reshape((3,3))
 
 
 def quat2zalign(quat):
@@ -133,7 +127,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'continue_goal': True,  # If true, draw a new goal after achievement
         'terminate_resample_failure': True,  # If true, end episode when resampling fails,
                                              # otherwise, raise a python exception.
-        # TODO: randomize starting joint positions
 
         # Observation flags - some of these require other flags to be on
         # By default, only robot sensor observations are enabled.
@@ -186,7 +179,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'lidar_num_bins3D': 1,  # Bins (around a full circle) for lidar sensing
         'lidar_max_dist': None,  # Maximum distance for lidar sensitivity (if None, exponential distance)
         'lidar_exp_gain': 1.0, # Scaling factor for distance in exponential distance lidar
-        'lidar_type': 'pseudo',  # 'pseudo', 'natural', see self.obs_lidar()
+        'lidar_type': 'pseudo',  # 'pseudo', see self.obs_lidar()
         'lidar_alias': True,  # Lidar bins alias into each other
         'lidar_body': ['robot'], # Bodies with Lidar
 
@@ -432,10 +425,9 @@ class Engine(gym.Env, gym.utils.EzPickle):
             assert key in self.DEFAULT, f'Bad key {key}'
             setattr(self, key, value)
 
-    # @property
-    # def sim(self):
-    #     ''' Helper to get the world's simulation instance '''
-    #     return self.world.sim
+    #----------------------------------------------------------------
+    # Property Functions
+    #----------------------------------------------------------------
 
     @property
     def model(self):
@@ -552,6 +544,241 @@ class Engine(gym.Env, gym.utils.EzPickle):
         ''' Helper to get the hazards positions from layout '''
         return [self.data.body(f'wall{i}').xpos.copy() for i in range(self.walls_num)]
 
+    #----------------------------------------------------------------
+    # Gym API
+    #----------------------------------------------------------------
+
+    def step(self, action):
+        ''' Take a step and return observation, reward, done, and info '''
+        action = np.array(action, copy=False)  # Cast to ndarray
+        assert not self.done, 'Environment must be reset before stepping'
+
+        info = {}
+
+        # Set action
+        if "drone" in self.robot_base:
+            action = np.clip(action, -1.0, 1.0)
+            mass = self.model.body_mass[self.data.body('robot').id]
+            mass += self.model.body_mass[self.data.body('p1').id]
+            mass += self.model.body_mass[self.data.body('p2').id]
+            mass += self.model.body_mass[self.data.body('p3').id]
+            mass += self.model.body_mass[self.data.body('p4').id]
+            robot_pos = self.world.robot_pos()
+            R = self.world.robot_mat()
+            f = mass * 9.81
+            if (robot_pos[2] > 3):
+                f = 0
+
+            torque = [0, 0, 0]
+            for i in range(4):
+                propeller = 'p' + str(i + 1)
+                force = [0, 0, f/4 + action[i]*1e-1]
+                force = np.array(force).reshape(3,1)
+                force = R@force
+                force = [force[i,0] for i in range(3)]
+                self.data.xfrc_applied[self.data.body(propeller).id,:] = force + torque
+        else:
+            action_range = self.model.actuator_ctrlrange
+            # action_scale = action_range[:,1] - action_range[:, 0]
+            self.data.ctrl[:] = np.clip(action, action_range[:,0], action_range[:,1]) #np.clip(action * 2 / action_scale, -1, 1)
+            if self.action_noise:
+                self.data.ctrl[:] += self.action_noise * self.rs.randn(self.model.nu)
+
+        # Simulate physics forward
+        exception = False
+        for _ in range(self.rs.binomial(self.frameskip_binom_n, self.frameskip_binom_p)):
+            try:
+                self.set_mocaps()
+                mujoco.mj_step(self.model, self.data)  # Physics simulation step
+            except:
+                print('MujocoException')
+                exception = True
+                break
+        if exception:
+            self.done = True
+            reward = self.reward_exception
+            info['cost_exception'] = 1.0
+        else:
+            mujoco.mj_forward(self.model, self.data)  # Needed to get sensor readings correct!
+
+            # Reward processing
+            reward = self.reward()
+
+            # Constraint violations
+            info.update(self.cost())
+
+            # Button timer (used to delay button resampling)
+            self.buttons_timer_tick()
+
+            # Goal processing
+            if self.goal_met():
+                info['goal_met'] = True
+                reward += self.reward_goal
+                if self.continue_goal:
+                    # Update the internal layout so we can correctly resample (given objects have moved)
+                    self.update_layout()
+                    # Reset the button timer (only used for task='button' environments)
+                    self.buttons_timer = self.buttons_resampling_delay
+                    # Try to build a new goal, end if we fail
+                    if self.terminate_resample_failure:
+                        try:
+                            self.build_goal()
+                        except ResamplingError as e:
+                            # Normal end of episode
+                            self.done = True
+                    else:
+                        # Try to make a goal, which could raise a ResamplingError exception
+                        self.build_goal()
+                else:
+                    self.done = True
+
+        # Timeout
+        self.steps += 1
+        if self.steps >= self.num_steps:
+            self.done = True  # Maximum number of steps in an episode reached
+
+        return self.obs(), reward, self.done, info
+
+    def reset(self):
+        ''' Reset the physics simulation and return observation '''
+        self._seed += 1  # Increment seed
+        self.rs = np.random.RandomState(self._seed)
+        self.done = False
+        self.steps = 0  # Count of steps taken in this episode
+        # Set the button timer to zero (so button is immediately visible)
+        self.buttons_timer = 0
+        self.last_dist_robber = -1
+        for _ in range(100):
+            self.clear()
+            self.build()
+            cost = self.cost()
+            if cost['cost'] == 0:
+                break
+
+        assert cost['cost'] == 0, f'World has starting cost! {cost}'
+
+        # Save the layout at reset
+        self.reset_layout = deepcopy(self.layout)
+
+        # Reset stateful parts of the environment
+        self.first_reset = False  # Built our first world successfully
+        self.reset_viewer = True
+        # Return an observation
+        return self.obs()
+
+    def render(self,
+               mode='human', 
+               camera_id=-1,
+               width=DEFAULT_WIDTH,
+               height=DEFAULT_HEIGHT,
+               ):
+        ''' Render the environment to the screen '''
+        model = self.model
+        data = self.data
+        self.model.vis.global_.offwidth = width
+        self.model.vis.global_.offheight = height
+        if self.viewer is not None and self.reset_viewer:
+            self.viewer.close()
+            self.viewer = None
+            self.renderer = None
+            self.reset_viewer = False
+        if self.viewer is None or mode!=self._old_render_mode:
+            # Set camera if specified
+            if mode == 'human':
+                self.viewer = mujoco.viewer.launch_passive(model, data)
+                self.viewer_setup()  
+            
+            self.renderer =  mujoco.Renderer(model, width = width, height = height)
+            self.renderer_cam, self.renderer_opt = self.renderer_setup()
+            self._old_render_mode = mode
+        mujoco.mj_step(model, data)
+        if self.viewer:
+            self.viewer.user_scn.ngeom = 0
+        self.renderer._scene.ngeom = 0
+        self.renderer.update_scene(data, self.renderer_cam, self.renderer_opt)
+
+        # Lidar markers
+        if self.render_lidar_markers:
+            offset = self.render_lidar_offset_init  # Height offset for successive lidar indicators
+            offset3D = 0.1 # Height offset for successive lidar indicators
+            if 'box_lidar' in self.obs_space_dict or 'box_compass' in self.obs_space_dict:
+                if 'box_lidar' in self.obs_space_dict:
+                    self.render_lidar([self.box_pos], COLOR_BOX, offset, GROUP_BOX)
+                if 'box_compass' in self.obs_space_dict:
+                    self.render_compass(self.box_pos, COLOR_BOX, offset)
+                offset += self.render_lidar_offset_delta
+            if 'goal_lidar' in self.obs_space_dict or 'goal_compass' in self.obs_space_dict:
+                if 'goal_lidar' in self.obs_space_dict:
+                    if self.goal_3D:
+                        self.render_lidar3D([self.goal_pos], COLOR_GOAL, offset3D, GROUP_GOAL)
+                        offset3D += self.render_lidar_offset_delta
+                    else:
+                        self.render_lidar([self.goal_pos], COLOR_GOAL, offset, GROUP_GOAL)
+                        offset += self.render_lidar_offset_delta
+                if 'goal_compass' in self.obs_space_dict:
+                    self.render_compass(self.goal_pos, COLOR_GOAL, offset)
+            if 'buttons_lidar' in self.obs_space_dict:
+                self.render_lidar(self.buttons_pos, COLOR_BUTTON, offset, GROUP_BUTTON)
+                offset += self.render_lidar_offset_delta
+            if 'circle_lidar' in self.obs_space_dict:
+                self.render_lidar([ORIGIN_COORDINATES], COLOR_CIRCLE, offset, GROUP_CIRCLE)
+                offset += self.render_lidar_offset_delta
+            if 'walls_lidar' in self.obs_space_dict:
+                self.render_lidar(self.walls_pos, COLOR_WALL, offset, GROUP_WALL)
+                offset += self.render_lidar_offset_delta
+            if 'hazards_lidar' in self.obs_space_dict:
+                self.render_lidar(self.hazards_pos, COLOR_HAZARD, offset, GROUP_HAZARD)
+                offset += self.render_lidar_offset_delta
+            if 'hazard3Ds_lidar' in self.obs_space_dict:
+                self.render_lidar3D(self.hazard3Ds_pos, COLOR_HAZARD3D, offset3D, GROUP_HAZARD3D)
+                offset3D += self.render_lidar_offset_delta
+            if 'pillars_lidar' in self.obs_space_dict:
+                self.render_lidar(self.pillars_pos, COLOR_PILLAR, offset, GROUP_PILLAR)
+                offset += self.render_lidar_offset_delta
+            if 'gremlins_lidar' in self.obs_space_dict:
+                self.render_lidar(self.gremlins_obj_pos, COLOR_GREMLIN, offset, GROUP_GREMLIN)
+                offset += self.render_lidar_offset_delta
+            if 'ghosts_lidar' in self.obs_space_dict:
+                self.render_lidar(self.ghosts_pos, COLOR_GHOST, offset, GROUP_GHOST)
+                offset += self.render_lidar_offset_delta
+            if 'ghost3Ds_lidar' in self.obs_space_dict:
+                self.render_lidar3D(self.ghost3Ds_pos, COLOR_GHOST3D, offset3D, GROUP_GHOST3D)
+                offset3D += self.render_lidar_offset_delta
+            if 'robbers_lidar' in self.obs_space_dict:
+                self.render_lidar(self.robbers_pos, COLOR_ROBBER, offset, GROUP_ROBBER3D)
+                offset += self.render_lidar_offset_delta
+            if 'robber3Ds_lidar' in self.obs_space_dict:
+                self.render_lidar3D(self.robber3Ds_pos, COLOR_ROBBER3D, offset3D, GROUP_ROBBER3D)
+                offset3D += self.render_lidar_offset_delta
+            if 'vases_lidar' in self.obs_space_dict:
+                self.render_lidar(self.vases_pos, COLOR_VASE, offset, GROUP_VASE)
+                offset += self.render_lidar_offset_delta
+
+        # Add goal marker
+        if self.task == 'button':
+            self.render_area(self.goal_pos, self.buttons_size * 2, COLOR_BUTTON, 'goal', alpha=0.1)
+
+        # Add indicator for nonzero cost
+        if self._cost.get('cost', 0) > 0:
+            self.render_sphere(self.world.robot_pos(), 0.5*np.ones(3), COLOR_RED, alpha=.5)
+
+        # Draw vision pixels
+        if self.observe_vision and self.vision_render:
+            vision = self.obs_vision()
+            vision = np.array(vision * 255, dtype='uint8')
+            vision = Image.fromarray(vision).resize(self.vision_render_size)
+            vision = np.array(vision, dtype='uint8')
+            self.save_obs_vision = vision
+
+        if mode=='human':
+            self.viewer.sync()
+
+        return self.renderer.render()[:, :, [2, 1, 0]]
+    
+    #----------------------------------------------------------------
+    # Environment Configuration Functions
+    #----------------------------------------------------------------
+
     def build_observation_space(self):
         ''' Construct observtion space.  Happens only once at during __init__ '''
         obs_space_dict = OrderedDict()  # See self.obs()
@@ -594,7 +821,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
                     obs_space_dict[sensor] = gym.spaces.Box(-np.inf, np.inf, (3, 3), dtype=np.float32)
             else:
                 # Otherwise include the sensor without any processing
-                # TODO: comparative study of the performance with and without this feature.
                 for sensor in self.robot.hinge_pos_names:
                     obs_space_dict[sensor] = gym.spaces.Box(-np.inf, np.inf, (1,), dtype=np.float32)
                 for sensor in self.robot.ballquat_names:
@@ -659,10 +885,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
             self.observation_space = gym.spaces.Box(-np.inf, np.inf, (self.obs_flat_size,), dtype=np.float32)
         else:
             self.observation_space = gym.spaces.Dict(obs_space_dict)
-
-    def toggle_observation_space(self):
-        self.observation_flatten = not(self.observation_flatten)
-        self.build_observation_space()
 
     def placements_from_location(self, location, keepout):
         ''' Helper to get a placements list from a given location and keepout '''
@@ -731,6 +953,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         self.placements = placements
 
     def build_mocap_dict(self):
+        ''' Build a dict of mocap objects.  Happens once during __init__. '''
         id = 0
         self.mocap_dict = {}
         for i in range(self.model.nbody):
@@ -739,10 +962,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 self.mocap_dict[name] = id
                 id += 1
         return
-
-    def set_mocap_pos(self, name, pos):
-        id = self.mocap_dict[name]
-        self.data.mocap_pos[id] = pos
 
     def seed(self, seed=None):
         ''' Set internal random state seeds '''
@@ -839,7 +1058,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
     def build_world_config(self):
         ''' Create a world_config from our own config '''
-        # TODO: parse into only the pieces we want/need
         world_config = {}
 
         world_config['robot_base'] = self.robot_base
@@ -1218,8 +1436,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
             raise ResamplingError('Failed to generate goal')
         # Move goal geom to new layout position
         self.world_config_dict['geoms']['goal']['pos'] = self.layout['goal']
-        #self.world.rebuild(deepcopy(self.world_config_dict))
-        #self.update_viewer_sim = True
         goal_body_id = self.model.body('goal').id
         self.model.body_pos[goal_body_id] = self.layout['goal']
         mujoco.mj_forward(self.model, self.data)
@@ -1253,119 +1469,239 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # Save last subtree center of mass
         self.last_subtreecom = self.world.get_sensor('subtreecom')
 
-    def reset(self):
-        ''' Reset the physics simulation and return observation '''
-        self._seed += 1  # Increment seed
-        self.rs = np.random.RandomState(self._seed)
-        self.done = False
-        self.steps = 0  # Count of steps taken in this episode
-        # Set the button timer to zero (so button is immediately visible)
-        self.buttons_timer = 0
-        # self.last_dist_ghost = -1
-        self.last_dist_robber = -1
-        for _ in range(100):
-            self.clear()
-            self.build()
-            cost = self.cost()
-            if cost['cost'] == 0:
-                break
+    #----------------------------------------------------------------
+    # Environment Update Functions
+    #----------------------------------------------------------------
 
-        assert cost['cost'] == 0, f'World has starting cost! {cost}'
+    def set_mocap_pos(self, name, pos):
+        ''' Set mocap object positions '''
+        id = self.mocap_dict[name]
+        self.data.mocap_pos[id] = pos
 
-        # Save the layout at reset
-        self.reset_layout = deepcopy(self.layout)
-
-        
-        
-
-        # Reset stateful parts of the environment
-        self.first_reset = False  # Built our first world successfully
-        self.reset_viewer = True
-        # Return an observation
-        return self.obs()
-
-    def dist_goal(self):
-        ''' Return the distance from the robot to the goal XY position '''
-        if 'arm' in self.robot_base:
-            end_pos = self.arm_end_pos
-            return np.sqrt(np.sum(np.square(self.goal_pos - end_pos)))
-        if self.goal_3D:
-             return self.dist_xyz(self.goal_pos)
-        return self.dist_xy(self.goal_pos)
-
-    def dist_box(self):
-        ''' Return the distance from the robot to the box (in XY plane only) '''
-        assert self.task == 'push', f'invalid task {self.task}'
-        if 'arm' in self.robot_base:
-            end_pos = self.arm_end_pos
-            return np.sqrt(np.sum(np.square(self.box_pos - end_pos)))
-        return np.sqrt(np.sum(np.square(self.box_pos - self.world.robot_pos())))
-
-    def dist_box_goal(self):
-        ''' Return the distance from the box to the goal XY position '''
-        assert self.task == 'push', f'invalid task {self.task}'
-        return np.sqrt(np.sum(np.square(self.box_pos - self.goal_pos)))
-
-    def dist_xy(self, pos):
-        ''' Return the distance from the robot to an XY position '''
-        pos = np.asarray(pos)
-        if pos.shape == (3,):
-            pos = pos[:2]
-        robot_pos = self.world.robot_pos()
-        return np.sqrt(np.sum(np.square(pos - robot_pos[:2])))
+    def set_mocaps_ghosts(self, robot_pos):
+        ''' Update the positions of ghosts'''
+        ghost_pos_last_dict = []
+        # Get the positions of the last step
+        for i in range(self.ghosts_num):
+            name = f'ghost{i}'
+            ghost_origin = self.layout[name]
+            ghost_pos_mocap = self.data.body(name +'mocap').xpos.copy()
+            # Calculate the global positions based on the origin positions and relative positions
+            ghost_pos_last_dict.append(ghost_pos_mocap[:2] + ghost_origin)
+        # Calculate the new positions for the current step
+        for i in range(self.ghosts_num):
+            name = f'ghost{i}'
+            ghost_origin = self.layout[name]
+            ghost_pos_mocap = self.data.body(name +'mocap').xpos.copy()
+            ghost_pos_last = ghost_pos_mocap[:2] + ghost_origin
+            target =  ghost_pos_mocap[:2]
+            # Keep a minimum distance between each position
+            for j in range(self.ghosts_num):
+                dist_ij = ghost_pos_last_dict[j] - ghost_pos_last_dict[i]
+                if j != i and np.sqrt(np.sum(np.square(dist_ij))) < 2 * self.ghosts_size:
+                    direction = - dist_ij / np.sqrt(np.sum(np.square(dist_ij)))
+                    target += self.ghosts_velocity*direction
+            if np.sqrt(np.sum(np.square(ghost_pos_last))) > self.ghosts_travel:
+                # Project the positions back to a constrained area
+                direction = - ghost_pos_last / np.sqrt(np.sum(np.square(ghost_pos_last)))
+                target += self.ghosts_velocity*direction
+            else:
+                # Move towards the position of the robot
+                direction = robot_pos[:2] - ghost_pos_last
+                norm = np.sqrt(np.sum(np.square(direction)))
+                direction_norm = direction / norm
+                # Keep a minimum distance from the robot
+                if norm < self.ghosts_safe_dist:  
+                    target = ghost_pos_mocap[:2]
+                else:
+                    target = ghost_pos_mocap[:2] + self.ghosts_velocity*direction_norm
+            
+            pos = np.r_[target, 2e-2]
+            self.set_mocap_pos(name + 'mocap', pos)
     
-    def dist_xyz(self, pos):
-        ''' Return the distance from the robot to an XYZ position '''
-        pos = np.asarray(pos)
-        assert pos.shape == (3,)
+    def set_mocaps_ghost3Ds(self, robot_pos):
+        ''' Update the positions of 3D ghosts'''
+        ghost3D_pos_last_dict = []
+        # Get the positions of the last step
+        for i in range(self.ghost3Ds_num):
+            name = f'ghost3D{i}'
+            ghost_origin = np.r_[self.layout[name], self._ghost3Ds_z[i]]
+            ghost_pos_mocap = self.data.body(name +'mocap').xpos.copy()
+            # Calculate the global positions based on the origin positions and relative positions
+            ghost3D_pos_last_dict.append(ghost_pos_mocap + ghost_origin)
+        # Calculate the new positions for the current step
+        for i in range(self.ghost3Ds_num):
+            name = f'ghost3D{i}'
+            ghost_origin = np.r_[self.layout[name], self._ghost3Ds_z[i]]
+            ghost_pos_mocap = self.data.body(name +'mocap').xpos.copy()
+            ghost_pos_last = ghost_pos_mocap + ghost_origin
+            target =  ghost_pos_mocap
+            # Keep a minimum distance between each position
+            for j in range(self.ghost3Ds_num):
+                dist_ij = ghost3D_pos_last_dict[j] - ghost3D_pos_last_dict[i]
+                if j != i and np.sqrt(np.sum(np.square(dist_ij))) < 2 * self.ghost3Ds_size:
+                    direction = - dist_ij / np.sqrt(np.sum(np.square(dist_ij)))
+                    target += self.ghost3Ds_velocity*direction
+                    
+            if np.sqrt(np.sum(np.square(ghost_pos_last[:2]))) > self.ghost3Ds_travel:
+                # Project the positions back to a constrained area
+                direction = - ghost_pos_last[:2] / np.sqrt(np.sum(np.square(ghost_pos_last[:2])))
+                target += np.r_[self.ghost3Ds_velocity*direction, 0]
+            else:
+                # Move towards the position of the robot
+                direction = robot_pos - ghost_pos_last
+                norm = np.sqrt(np.sum(np.square(direction)))
+                direction_norm = direction / norm
+                # Keep a minimum distance from the robot
+                if norm < self.ghost3Ds_safe_dist: 
+                    target = ghost_pos_mocap
+                else:
+                    target = ghost_pos_mocap + self.ghost3Ds_velocity*direction_norm
+            target[2] = np.clip(target[2], self.ghost3Ds_z_range[0], self.ghost3Ds_z_range[1])              
+            pos = target
+            self.set_mocap_pos(name + 'mocap', pos)
+                
+    def set_mocaps_robbers(self, robot_pos):
+        ''' Update the positions of robbers'''
+        robber_pos_last_dict = []
+        # Get the positions of the last step
+        for i in range(self.robbers_num):
+            name = f'robber{i}'
+            robber_origin = self.layout[name]
+            robber_pos_mocap = self.data.body(name +'mocap').xpos.copy()
+                # Calculate the global positions based on the origin positions and relative positions
+            robber_pos_last_dict.append(robber_pos_mocap[:2] + robber_origin)
+        # Calculate the new positions for the current step
+        for i in range(self.robbers_num):
+            name = f'robber{i}'
+            robber_origin = self.layout[name]
+            robber_pos_mocap = self.data.body(name +'mocap').xpos.copy()
+            robber_pos_last = robber_pos_mocap[:2] + robber_origin
+            target =  robber_pos_mocap[:2]
+            # Keep a minimum distance between each position
+            for j in range(self.robbers_num):
+                dist_ij = robber_pos_last_dict[j] - robber_pos_last_dict[i]
+                if j != i and np.sqrt(np.sum(np.square(dist_ij))) < 2 * self.robbers_size:
+                    direction = - dist_ij / np.sqrt(np.sum(np.square(dist_ij)))
+                    target += self.robbers_velocity*direction
+            if np.sqrt(np.sum(np.square(robber_pos_last))) > self.robbers_travel:
+                # Project the positions back to a constrained area
+                direction = - robber_pos_last / np.sqrt(np.sum(np.square(robber_pos_last)))
+                target += self.robbers_velocity*direction
+            else:
+                direction = robot_pos[:2] - robber_pos_last
+                norm = np.sqrt(np.sum(np.square(direction)))
+                direction_norm = direction / norm
+                if self.task == 'defense':
+                    if norm > self.defense_range:
+                        # Move away from the robot if get too close
+                        direction_norm = - robber_pos_last[:2] / np.sqrt(np.sum(np.square(robber_pos_last[:2])))
+                        target = robber_pos_mocap[:2] + self.robbers_velocity*direction_norm
+                    else:
+                        # Move towards the center of the defensed area
+                        target = robber_pos_mocap[:2] - self.robbers_velocity*10*direction_norm
+                elif self.task == 'chase':
+                    # Keep a minimum distance from the robot
+                    if norm > self.chase_range:
+                        target = robber_pos_mocap[:2]
+                    else:
+                        target = robber_pos_mocap[:2] - self.robbers_velocity*10*direction_norm
+                else:
+                    target = robber_pos_mocap[:2] - self.robbers_velocity*direction_norm
+            
+            pos = np.r_[target, 2e-2]
+            self.set_mocap_pos(name + 'mocap', pos)
+    
+    def set_mocaps_robber3Ds(self, robot_pos):
+        ''' Update the positions of 3D robbers'''
+        robber3D_pos_last_dict = []
+        # Get the positions of the last step
+        for i in range(self.robber3Ds_num):
+            name = f'robber3D{i}'
+            robber_origin = np.r_[self.layout[name], self._robber3Ds_z[i]]
+            robber_pos_mocap = self.data.body(name +'mocap').xpos.copy()
+            # Calculate the global positions based on the origin positions and relative positions
+            robber3D_pos_last_dict.append(robber_pos_mocap + robber_origin)
+        # Calculate the new positions for the current step
+        for i in range(self.robber3Ds_num):
+            name = f'robber3D{i}'
+            robber_origin = np.r_[self.layout[name], self._robber3Ds_z[i]]
+            robber_pos_mocap = self.data.body(name +'mocap').xpos.copy()
+            robber_pos_last = robber_pos_mocap + robber_origin
+            target =  robber_pos_mocap
+            # Keep a minimum distance between each position
+            for j in range(self.robber3Ds_num):
+                dist_ij = robber3D_pos_last_dict[j] - robber3D_pos_last_dict[i]
+                if j != i and np.sqrt(np.sum(np.square(dist_ij))) < 2 * self.robber3Ds_size:
+                    direction = - dist_ij / np.sqrt(np.sum(np.square(dist_ij)))
+                    target += self.robber3Ds_velocity*direction
+                # Project the positions back to a constrained area
+            if np.sqrt(np.sum(np.square(robber_pos_last[:2]))) > self.robber3Ds_travel:
+                direction = - robber_pos_last[:2] / np.sqrt(np.sum(np.square(robber_pos_last[:2])))
+                target += np.r_[self.robber3Ds_velocity*direction, 0]
+            else:
+                direction = robot_pos - robber_pos_last
+                norm = np.sqrt(np.sum(np.square(direction)))
+                direction_norm = direction / norm
+                if self.task == 'defense':
+                    if norm > self.defense_range:
+                        # Move away from the robot if get too close
+                        direction_norm = - robber_pos_last[:2] / np.sqrt(np.sum(np.square(robber_pos_last[:2])))
+                        target = robber_pos_mocap + self.robber3Ds_velocity*np.r_[direction_norm,0]
+                    else:
+                        # Move towards the center of the defensed area
+                        target = robber_pos_mocap - self.robber3Ds_velocity*10*direction_norm
+                elif self.task == 'chase':
+                    # Keep a minimum distance from the robot
+                    if norm > self.chase_range:
+                        target = robber_pos_mocap
+                    else:
+                        target = robber_pos_mocap - self.robber3Ds_velocity*10*direction_norm
+                else:
+                    target = robber_pos_mocap - self.robbers_velocity*direction_norm
+                    
+            target[2] = np.clip(target[2], self.robber3Ds_z_range[0], self.robber3Ds_z_range[1])              
+            pos = target
+            self.set_mocap_pos(name + 'mocap', pos)
+
+    def set_mocaps(self):
+        ''' Set mocap object positions before a physics step is executed '''
+        if self.gremlins_num: 
+            phase = float(self.data.time)
+            for i in range(self.gremlins_num):
+                name = f'gremlin{i}'
+                target = np.array([np.sin(phase), np.cos(phase)]) * self.gremlins_travel
+                pos = np.r_[target, [self.gremlins_size]]
+                self.set_mocap_pos(name + 'mocap', pos)
         if 'arm' in self.robot_base:
-            link = []
-            link_r = []
-            for i in range(self.arm_link_n):
-                link.append(self.world.body_pos('link_'+ str(i + 1)))
-                link_r.append(self.world.body_size('link_'+ str(i + 1))[0])
-                assert link[i].shape == (3,)
+            robot_pos = self.arm_end_pos
+        else:
+            robot_pos = self.world.robot_pos()
+        if self.ghosts_num:
+            self.set_mocaps_ghosts(robot_pos)
+        if self.ghost3Ds_num:
+            self.set_mocaps_ghost3Ds(robot_pos)
+        if self.robbers_num: 
+            self.set_mocaps_robbers(robot_pos)
+        if self.robber3Ds_num: 
+            self.set_mocaps_robber3Ds(robot_pos)
+            
+    def update_layout(self):
+        ''' Update layout dictionary with new places of objects '''
+        mujoco.mj_forward(self.model, self.data)
+        for k in list(self.layout.keys()):
+            # Mocap objects have to be handled separately
+            if 'gremlin' in k or 'ghost' in k or 'robber' in k:
+                continue
+            self.layout[k] = self.data.body(k).xpos[:2].copy()
 
-            min_dist = float('inf')
+    def buttons_timer_tick(self):
+        ''' Tick the buttons resampling timer '''
+        self.buttons_timer = max(0, self.buttons_timer - 1)
 
-            for i in range(self.arm_link_n - 1):
-                cur_dist, _ = distLinSeg(link[i], link[i + 1], pos, pos)
-                cur_dist -= link_r[i]
-                min_dist = min(cur_dist, min_dist)
-            return min_dist    
-        
-        robot_pos = self.world.robot_pos()
-        return np.sqrt(np.sum(np.square(pos - robot_pos)))
-
-    def world_xy(self, pos):
-        ''' Return the world XY vector to a position from the robot '''
-        assert pos.shape == (2,)
-        return pos - self.world.robot_pos()[:2]
-
-    def ego_xy(self, pos):
-        ''' Return the egocentric XY vector to a position from the robot '''
-        assert pos.shape == (2,), f'Bad pos {pos}'
-        robot_3vec = self.world.robot_pos()
-        robot_mat = self.world.robot_mat()
-        pos_3vec = np.concatenate([pos, [0]])  # Add a zero z-coordinate
-        world_3vec = pos_3vec - robot_3vec
-        return np.matmul(world_3vec, robot_mat)[:2]  # only take XY coordinates
-    
-    def ego_xyz(self, pos):
-        ''' Return the egocentric XY vector to a position from the robot '''
-        assert pos.shape == (3,), f'Bad 3Dpos {pos}'
-        robot_3vec = self.world.robot_pos()
-        robot_mat = self.world.robot_mat()
-        world_3vec = pos - robot_3vec
-        return np.matmul(world_3vec, robot_mat) # only take XY coordinates
-    
-    def ego_body_xyz(self, body, pos):
-        ''' Return the egocentric XY vector to a position from the robot '''
-        assert pos.shape == (3,), f'Bad 3Dpos {pos}'
-        body_3vec = self.world.body_pos(body)
-        body_mat = self.world.body_mat(body)
-        world_3vec = pos - body_3vec
-        return np.matmul(world_3vec, body_mat) # only take XY coordinates
+    #----------------------------------------------------------------
+    # observation, reward and cost functions
+    #----------------------------------------------------------------
 
     def obs_compass(self, pos):
         '''
@@ -1410,8 +1746,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
         '''
         if self.lidar_type == 'pseudo':
             return self.obs_lidar_pseudo(positions)
-        elif self.lidar_type == 'natural':
-            return self.obs_lidar_natural(group)
         else:
             raise ValueError(f'Invalid lidar_type {self.lidar_type}')
     
@@ -1421,11 +1755,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
         '''
         if self.lidar_type == 'pseudo':
             return self.obs_lidar_pseudo3D(positions)
-        # elif self.lidar_type == 'natural':
-        #     #TODO self.obs_lidar_natural3D
-        #     return self.obs_lidar_natural(group)
         else:
-            raise ValueError(f'Invalid lidar_type {self.lidar_type}')
+            raise ValueError(f'Invalid 3D_lidar_type {self.lidar_type}')
 
     def obs_lidar_pseudo(self, positions):
         '''
@@ -1578,13 +1909,13 @@ class Engine(gym.Env, gym.utils.EzPickle):
             for sensor in self.robot.ballangvel_names:
                 obs[sensor] = self.world.get_sensor(sensor)
             # Process angular position sensors
-            # if self.sensors_angle_components:
-            #     for sensor in self.robot.hinge_pos_names:
-            #         theta = float(self.world.get_sensor(sensor))  # Ensure not 1D, 1-element array
-            #         obs[sensor] = np.array([np.sin(theta), np.cos(theta)])
-            #     for sensor in self.robot.ballquat_names:
-            #         quat = self.world.get_sensor(sensor)
-            #         obs[sensor] = quat2mat(quat)
+            if self.sensors_angle_components:
+                for sensor in self.robot.hinge_pos_names:
+                    theta = float(self.world.get_sensor(sensor))  # Ensure not 1D, 1-element array
+                    obs[sensor] = np.array([np.sin(theta), np.cos(theta)])
+                for sensor in self.robot.ballquat_names:
+                    quat = self.world.get_sensor(sensor)
+                    obs[sensor] = quat2mat(quat)
             else:  # Otherwise read sensors directly
                 for sensor in self.robot.hinge_pos_names:
                     obs[sensor] = self.world.get_sensor(sensor)
@@ -1639,395 +1970,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
             obs = flat_obs
         assert self.observation_space.contains(obs), f'Bad obs {obs} {self.observation_space}'
         return obs
-
-
-    def cost(self):
-        ''' Calculate the current costs and return a dict '''
-        mujoco.mj_forward(self.model, self.data)  # Ensure positions and contacts are correct
-        cost = {}
-        # Conctacts processing
-        if self.constrain_vases:
-            cost['cost_vases_contact'] = 0
-        if self.constrain_pillars:
-            cost['cost_pillars'] = 0
-        if self.constrain_buttons:
-            cost['cost_buttons'] = 0
-        if self.constrain_gremlins:
-            cost['cost_gremlins'] = 0
-        if self.constrain_ghosts:
-            cost['cost_ghosts'] = 0
-        if self.constrain_ghost3Ds:
-            cost['cost_ghost3Ds'] = 0
-        buttons_constraints_active = self.constrain_buttons and (self.buttons_timer == 0)
-        for contact in self.data.contact[:self.data.ncon]:
-            geom_ids = [contact.geom1, contact.geom2]
-            geom_names = sorted([self.model.geom(g).name for g in geom_ids])
-            if self.constrain_vases and any(n.startswith('vase') for n in geom_names):
-                if any(n in self.robot.geom_names for n in geom_names):
-                    cost['cost_vases_contact'] += self.vases_contact_cost
-            if self.constrain_pillars and any(n.startswith('pillar') for n in geom_names):
-                if any(n in self.robot.geom_names for n in geom_names):
-                    cost['cost_pillars'] += self.pillars_cost
-            if buttons_constraints_active and any(n.startswith('button') for n in geom_names):
-                if any(n in self.robot.geom_names for n in geom_names):
-                    if not any(n == f'button{self.goal_button}' for n in geom_names):
-                        cost['cost_buttons'] += self.buttons_cost
-            if self.constrain_gremlins and any(n.startswith('gremlin') for n in geom_names):
-                if any(n in self.robot.geom_names for n in geom_names):
-                    cost['cost_gremlins'] += self.gremlins_contact_cost
-            if self.constrain_ghosts and self.ghosts_contact and any(n.startswith('ghost') for n in geom_names):
-                if any(n.startswith('ghost3D') for n in geom_names):
-                    continue
-                if any(n in self.robot.geom_names for n in geom_names):
-                    cost['cost_ghosts'] += self.ghosts_contact_cost
-            if self.constrain_ghost3Ds and self.ghost3Ds_contact and any(n.startswith('ghost3D') for n in geom_names):
-                if any(n in self.robot.geom_names for n in geom_names):
-                    cost['cost_ghost3Ds'] += self.ghost3Ds_contact_cost
-
-        # Displacement processing
-        if self.constrain_vases and self.vases_displace_cost:
-            cost['cost_vases_displace'] = 0
-            for i in range(self.vases_num):
-                name = f'vase{i}'
-                dist = np.sqrt(np.sum(np.square(self.data.body(name).xpos[:2] - self.reset_layout[name])))
-                if dist > self.vases_displace_threshold:
-                    cost['cost_vases_displace'] += dist * self.vases_displace_cost
-
-        # Velocity processing
-        if self.constrain_vases and self.vases_velocity_cost:
-            # TODO: penalize rotational velocity too, but requires another cost coefficient
-            cost['cost_vases_velocity'] = 0
-            for i in range(self.vases_num):
-                name = f'vase{i}'
-                vel = np.sqrt(np.sum(np.square(self.data.get_body_xvelp(name))))
-                if vel >= self.vases_velocity_threshold:
-                    cost['cost_vases_velocity'] += vel * self.vases_velocity_cost
-
-        # Calculate constraint violations
-        if self.constrain_hazards:
-            cost['cost_hazards'] = 0
-            for h_pos in self.hazards_pos:
-                h_dist = self.dist_xy(h_pos)
-                if h_dist <= self.hazards_size:
-                    cost['cost_hazards'] += self.hazards_cost * (self.hazards_size - h_dist)
-        
-        if self.constrain_hazard3Ds:
-            cost['cost_hazard3Ds'] = 0
-            for h_pos in self.hazard3Ds_pos:
-                h_dist = self.dist_xyz(h_pos)
-                if h_dist <= self.hazard3Ds_size:
-                    cost['cost_hazard3Ds'] += self.hazard3Ds_cost * (self.hazard3Ds_size - h_dist)
-
-        # Calculate non-contact cost of ghosts
-        if self.constrain_ghosts and (self.ghosts_contact == False):
-            for h_pos in self.ghosts_pos:
-                h_dist = self.dist_xy(h_pos)
-                if h_dist <= self.ghosts_size:
-                    cost['cost_ghosts'] += self.ghosts_dist_cost * (self.ghosts_size - h_dist)
-
-        if self.constrain_ghost3Ds and (self.ghost3Ds_contact == False):
-            for h_pos in self.ghost3Ds_pos:
-                h_dist = self.dist_xyz(h_pos)
-                if h_dist <= self.ghost3Ds_size:
-                    cost['cost_ghost3Ds'] += self.ghost3Ds_dist_cost * (self.ghost3Ds_size - h_dist)
-
-        # Sum all costs into single total cost
-        cost['cost'] = sum(v for k, v in cost.items() if k.startswith('cost_'))
-
-        # Optionally remove shaping from reward functions.
-        if self.constrain_indicator:
-            for k in list(cost.keys()):
-                cost[k] = float(cost[k] > 0.0)  # Indicator function
-
-        self._cost = cost
-
-        return cost
-
-    def goal_met(self):
-        ''' Return true if the current goal is met this step '''
-        if self.task == 'goal':
-            return self.dist_goal() <= self.goal_size
-        if self.task == 'push':
-            return self.dist_box_goal() <= self.goal_size
-        if self.task == 'button':
-            for contact in self.data.contact[:self.data.ncon]:
-                geom_ids = [contact.geom1, contact.geom2]
-                geom_names = sorted([self.model.geom_id2name(g) for g in geom_ids])
-                if any(n == f'button{self.goal_button}' for n in geom_names):
-                    if any(n in self.robot.geom_names for n in geom_names):
-                        return True
-            return False
-        if self.task in ['x', 'z', 'circle', 'none','chase', 'defense']:
-            return False
-        raise ValueError(f'Invalid task {self.task}')
-
-    def set_mocaps(self):
-        ''' Set mocap object positions before a physics step is executed '''
-        if self.gremlins_num: # self.constrain_gremlins:
-            phase = float(self.data.time)
-            for i in range(self.gremlins_num):
-                name = f'gremlin{i}'
-                target = np.array([np.sin(phase), np.cos(phase)]) * self.gremlins_travel
-                pos = np.r_[target, [self.gremlins_size]]
-                import ipdb;ipdb.set_trace()
-                self.set_mocap_pos(name + 'mocap', pos)
-        if 'arm' in self.robot_base:
-            robot_pos = self.arm_end_pos
-        else:
-            robot_pos = self.world.robot_pos()
-        if self.ghosts_num:
-            phase = float(self.data.time)
-            ghost_pos_last_dict = []
-            for i in range(self.ghosts_num):
-                name = f'ghost{i}'
-                ghost_origin = self.layout[name]
-                ghost_pos_mocap = self.data.body(name +'mocap').xpos.copy()
-                ghost_pos_last_dict.append(ghost_pos_mocap[:2] + ghost_origin)
-            for i in range(self.ghosts_num):
-                name = f'ghost{i}'
-                ghost_origin = self.layout[name]
-                ghost_pos_mocap = self.data.body(name +'mocap').xpos.copy()
-                ghost_pos_last = ghost_pos_mocap[:2] + ghost_origin
-                target =  ghost_pos_mocap[:2]
-                for j in range(self.ghosts_num):
-                    dist_ij = ghost_pos_last_dict[j] - ghost_pos_last_dict[i]
-                    if j != i and np.sqrt(np.sum(np.square(dist_ij))) < 2 * self.ghosts_size:
-                        direction = - dist_ij / np.sqrt(np.sum(np.square(dist_ij)))
-                        target += self.ghosts_velocity*direction
-                if np.sqrt(np.sum(np.square(ghost_pos_last))) > self.ghosts_travel:
-                    direction = - ghost_pos_last / np.sqrt(np.sum(np.square(ghost_pos_last)))
-                    target += self.ghosts_velocity*direction
-                else:
-                    direction = robot_pos[:2] - ghost_pos_last
-                    norm = np.sqrt(np.sum(np.square(direction)))
-                    direction_norm = direction / norm
-                    if norm < self.ghosts_safe_dist:  
-                        target = ghost_pos_mocap[:2]
-                    else:
-                        target = ghost_pos_mocap[:2] + self.ghosts_velocity*direction_norm
-                
-                pos = np.r_[target, 2e-2]
-                self.set_mocap_pos(name + 'mocap', pos)
-        if self.ghost3Ds_num:
-            ghost3D_pos_last_dict = []
-            for i in range(self.ghost3Ds_num):
-                name = f'ghost3D{i}'
-                ghost_origin = np.r_[self.layout[name], self._ghost3Ds_z[i]]
-                ghost_pos_mocap = self.data.body(name +'mocap').xpos.copy()
-                ghost3D_pos_last_dict.append(ghost_pos_mocap + ghost_origin)
-            for i in range(self.ghost3Ds_num):
-                name = f'ghost3D{i}'
-                ghost_origin = np.r_[self.layout[name], self._ghost3Ds_z[i]]
-                ghost_pos_mocap = self.data.body(name +'mocap').xpos.copy()
-                ghost_pos_last = ghost_pos_mocap + ghost_origin
-                target =  ghost_pos_mocap
-                for j in range(self.ghost3Ds_num):
-                    dist_ij = ghost3D_pos_last_dict[j] - ghost3D_pos_last_dict[i]
-                    if j != i and np.sqrt(np.sum(np.square(dist_ij))) < 2 * self.ghost3Ds_size:
-                        direction = - dist_ij / np.sqrt(np.sum(np.square(dist_ij)))
-                        target += self.ghost3Ds_velocity*direction
-                if np.sqrt(np.sum(np.square(ghost_pos_last[:2]))) > self.ghost3Ds_travel:
-                    direction = - ghost_pos_last[:2] / np.sqrt(np.sum(np.square(ghost_pos_last[:2])))
-                    target += np.r_[self.ghost3Ds_velocity*direction, 0]
-                else:
-                    direction = robot_pos - ghost_pos_last
-                    norm = np.sqrt(np.sum(np.square(direction)))
-                    direction_norm = direction / norm
-                    if norm < self.ghost3Ds_safe_dist: 
-                        target = ghost_pos_mocap
-                    else:
-                        target = ghost_pos_mocap + self.ghost3Ds_velocity*direction_norm
-                        
-                target[2] = np.clip(target[2], self.ghost3Ds_z_range[0], self.ghost3Ds_z_range[1])              
-                pos = target
-                self.set_mocap_pos(name + 'mocap', pos)
-        if self.robbers_num: 
-            robber_pos_last_dict = []
-            for i in range(self.robbers_num):
-                name = f'robber{i}'
-                robber_origin = self.layout[name]
-                robber_pos_mocap = self.data.body(name +'mocap').xpos.copy()
-                robber_pos_last_dict.append(robber_pos_mocap[:2] + robber_origin)
-            for i in range(self.robbers_num):
-                name = f'robber{i}'
-                robber_origin = self.layout[name]
-                robber_pos_mocap = self.data.body(name +'mocap').xpos.copy()
-                robber_pos_last = robber_pos_mocap[:2] + robber_origin
-                target =  robber_pos_mocap[:2]
-                for j in range(self.robbers_num):
-                    dist_ij = robber_pos_last_dict[j] - robber_pos_last_dict[i]
-                    if j != i and np.sqrt(np.sum(np.square(dist_ij))) < 2 * self.robbers_size:
-                        direction = - dist_ij / np.sqrt(np.sum(np.square(dist_ij)))
-                        target += self.robbers_velocity*direction
-                if np.sqrt(np.sum(np.square(robber_pos_last))) > self.robbers_travel:
-                    direction = - robber_pos_last / np.sqrt(np.sum(np.square(robber_pos_last)))
-                    target += self.robbers_velocity*direction
-                else:
-                    direction = robot_pos[:2] - robber_pos_last
-                    norm = np.sqrt(np.sum(np.square(direction)))
-                    direction_norm = direction / norm
-                    if self.task == 'defense':
-                        if norm > self.defense_range:
-                            direction_norm = - robber_pos_last[:2] / np.sqrt(np.sum(np.square(robber_pos_last[:2])))
-                            target = robber_pos_mocap[:2] + self.robbers_velocity*direction_norm
-                        else:
-                            target = robber_pos_mocap[:2] - self.robbers_velocity*10*direction_norm
-                    elif self.task == 'chase':
-                        if norm > self.chase_range:
-                            target = robber_pos_mocap[:2]
-                        else:
-                            target = robber_pos_mocap[:2] - self.robbers_velocity*10*direction_norm
-                    else:
-                        target = robber_pos_mocap[:2] - self.robbers_velocity*direction_norm
-                
-                pos = np.r_[target, 2e-2]
-                self.set_mocap_pos(name + 'mocap', pos)
-        if self.robber3Ds_num: # self.constrain_gremlins:
-            phase = float(self.data.time)
-            robber3D_pos_last_dict = []
-            for i in range(self.robber3Ds_num):
-                name = f'robber3D{i}'
-                robber_origin = np.r_[self.layout[name], self._robber3Ds_z[i]]
-                robber_pos_mocap = self.data.body(name +'mocap').xpos.copy()
-                robber3D_pos_last_dict.append(robber_pos_mocap + robber_origin)
-            for i in range(self.robber3Ds_num):
-                name = f'robber3D{i}'
-                robber_origin = np.r_[self.layout[name], self._robber3Ds_z[i]]
-                robber_pos_mocap = self.data.body(name +'mocap').xpos.copy()
-                robber_pos_last = robber_pos_mocap + robber_origin
-                target =  robber_pos_mocap
-                for j in range(self.robber3Ds_num):
-                    dist_ij = robber3D_pos_last_dict[j] - robber3D_pos_last_dict[i]
-                    if j != i and np.sqrt(np.sum(np.square(dist_ij))) < 2 * self.robber3Ds_size:
-                        direction = - dist_ij / np.sqrt(np.sum(np.square(dist_ij)))
-                        target += self.robber3Ds_velocity*direction
-                if np.sqrt(np.sum(np.square(robber_pos_last[:2]))) > self.robber3Ds_travel:
-                    direction = - robber_pos_last[:2] / np.sqrt(np.sum(np.square(robber_pos_last[:2])))
-                    target += np.r_[self.robber3Ds_velocity*direction, 0]
-                else:
-                    direction = robot_pos - robber_pos_last
-                    norm = np.sqrt(np.sum(np.square(direction)))
-                    direction_norm = direction / norm
-                    if self.task == 'defense':
-                        if norm > self.defense_range:
-                            direction_norm = - robber_pos_last[:2] / np.sqrt(np.sum(np.square(robber_pos_last[:2])))
-                            target = robber_pos_mocap + self.robber3Ds_velocity*np.r_[direction_norm,0]
-                        else:
-                            target = robber_pos_mocap - self.robber3Ds_velocity*10*direction_norm
-                    elif self.task == 'chase':
-                        if norm > self.chase_range:
-                            target = robber_pos_mocap
-                        else:
-                            target = robber_pos_mocap - self.robber3Ds_velocity*10*direction_norm
-                    else:
-                        target = robber_pos_mocap - self.robbers_velocity*direction_norm
-                        
-                target[2] = np.clip(target[2], self.robber3Ds_z_range[0], self.robber3Ds_z_range[1])              
-                pos = target
-                self.set_mocap_pos(name + 'mocap', pos)
-    def update_layout(self):
-        ''' Update layout dictionary with new places of objects '''
-        mujoco.mj_forward(self.model, self.data)
-        for k in list(self.layout.keys()):
-            # Mocap objects have to be handled separately
-            if 'gremlin' in k or 'ghost' in k or 'robber' in k:
-                continue
-            self.layout[k] = self.data.body(k).xpos[:2].copy()
-
-    def buttons_timer_tick(self):
-        ''' Tick the buttons resampling timer '''
-        self.buttons_timer = max(0, self.buttons_timer - 1)
-
-    def step(self, action):
-        ''' Take a step and return observation, reward, done, and info '''
-        action = np.array(action, copy=False)  # Cast to ndarray
-        assert not self.done, 'Environment must be reset before stepping'
-
-        info = {}
-
-        # Set action
-        if "drone" in self.robot_base:
-            action = np.clip(action, -1.0, 1.0)
-            mass = self.model.body_mass[self.data.body('robot').id]
-            mass += self.model.body_mass[self.data.body('p1').id]
-            mass += self.model.body_mass[self.data.body('p2').id]
-            mass += self.model.body_mass[self.data.body('p3').id]
-            mass += self.model.body_mass[self.data.body('p4').id]
-            robot_pos = self.world.robot_pos()
-            R = self.world.robot_mat()
-            f = mass * 9.81
-            if (robot_pos[2] > 3):
-                f = 0
-
-            torque = [0, 0, 0]
-            for i in range(4):
-                propeller = 'p' + str(i + 1)
-                force = [0, 0, f/4 + action[i]*1e-1]
-                force = np.array(force).reshape(3,1)
-                force = R@force
-                force = [force[i,0] for i in range(3)]
-                self.data.xfrc_applied[self.data.body(propeller).id,:] = force + torque
-        else:
-            action_range = self.model.actuator_ctrlrange
-            # action_scale = action_range[:,1] - action_range[:, 0]
-            self.data.ctrl[:] = np.clip(action, action_range[:,0], action_range[:,1]) #np.clip(action * 2 / action_scale, -1, 1)
-            if self.action_noise:
-                self.data.ctrl[:] += self.action_noise * self.rs.randn(self.model.nu)
-
-        # Simulate physics forward
-        exception = False
-        for _ in range(self.rs.binomial(self.frameskip_binom_n, self.frameskip_binom_p)):
-            try:
-                self.set_mocaps()
-                mujoco.mj_step(self.model, self.data)  # Physics simulation step
-            except MujocoException as me:
-                print('MujocoException', me)
-                exception = True
-                break
-        if exception:
-            self.done = True
-            reward = self.reward_exception
-            info['cost_exception'] = 1.0
-        else:
-            mujoco.mj_forward(self.model, self.data)  # Needed to get sensor readings correct!
-
-            # Reward processing
-            reward = self.reward()
-
-            # Constraint violations
-            info.update(self.cost())
-
-            # Button timer (used to delay button resampling)
-            self.buttons_timer_tick()
-
-            # Goal processing
-            if self.goal_met():
-                info['goal_met'] = True
-                reward += self.reward_goal
-                if self.continue_goal:
-                    # Update the internal layout so we can correctly resample (given objects have moved)
-                    self.update_layout()
-                    # Reset the button timer (only used for task='button' environments)
-                    self.buttons_timer = self.buttons_resampling_delay
-                    # Try to build a new goal, end if we fail
-                    if self.terminate_resample_failure:
-                        try:
-                            self.build_goal()
-                        except ResamplingError as e:
-                            # Normal end of episode
-                            self.done = True
-                    else:
-                        # Try to make a goal, which could raise a ResamplingError exception
-                        self.build_goal()
-                else:
-                    self.done = True
-
-        # Timeout
-        self.steps += 1
-        if self.steps >= self.num_steps:
-            self.done = True  # Maximum number of steps in an episode reached
-
-        return self.obs(), reward, self.done, info
 
     def reward(self):
         ''' Calculate the dense component of reward.  Call exactly once per step '''
@@ -2100,8 +2042,214 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 print('Warning: reward was outside of range!')
         return reward
 
+    def cost(self):
+        ''' Calculate the current costs and return a dict '''
+        mujoco.mj_forward(self.model, self.data)  # Ensure positions and contacts are correct
+        cost = {}
+        # Conctacts processing
+        if self.constrain_vases:
+            cost['cost_vases_contact'] = 0
+        if self.constrain_pillars:
+            cost['cost_pillars'] = 0
+        if self.constrain_buttons:
+            cost['cost_buttons'] = 0
+        if self.constrain_gremlins:
+            cost['cost_gremlins'] = 0
+        if self.constrain_ghosts:
+            cost['cost_ghosts'] = 0
+        if self.constrain_ghost3Ds:
+            cost['cost_ghost3Ds'] = 0
+        buttons_constraints_active = self.constrain_buttons and (self.buttons_timer == 0)
+        for contact in self.data.contact[:self.data.ncon]:
+            geom_ids = [contact.geom1, contact.geom2]
+            geom_names = sorted([self.model.geom(g).name for g in geom_ids])
+            if self.constrain_vases and any(n.startswith('vase') for n in geom_names):
+                if any(n in self.robot.geom_names for n in geom_names):
+                    cost['cost_vases_contact'] += self.vases_contact_cost
+            if self.constrain_pillars and any(n.startswith('pillar') for n in geom_names):
+                if any(n in self.robot.geom_names for n in geom_names):
+                    cost['cost_pillars'] += self.pillars_cost
+            if buttons_constraints_active and any(n.startswith('button') for n in geom_names):
+                if any(n in self.robot.geom_names for n in geom_names):
+                    if not any(n == f'button{self.goal_button}' for n in geom_names):
+                        cost['cost_buttons'] += self.buttons_cost
+            if self.constrain_gremlins and any(n.startswith('gremlin') for n in geom_names):
+                if any(n in self.robot.geom_names for n in geom_names):
+                    cost['cost_gremlins'] += self.gremlins_contact_cost
+            if self.constrain_ghosts and self.ghosts_contact and any(n.startswith('ghost') for n in geom_names):
+                if any(n.startswith('ghost3D') for n in geom_names):
+                    continue
+                if any(n in self.robot.geom_names for n in geom_names):
+                    cost['cost_ghosts'] += self.ghosts_contact_cost
+            if self.constrain_ghost3Ds and self.ghost3Ds_contact and any(n.startswith('ghost3D') for n in geom_names):
+                if any(n in self.robot.geom_names for n in geom_names):
+                    cost['cost_ghost3Ds'] += self.ghost3Ds_contact_cost
+
+        # Displacement processing
+        if self.constrain_vases and self.vases_displace_cost:
+            cost['cost_vases_displace'] = 0
+            for i in range(self.vases_num):
+                name = f'vase{i}'
+                dist = np.sqrt(np.sum(np.square(self.data.body(name).xpos[:2] - self.reset_layout[name])))
+                if dist > self.vases_displace_threshold:
+                    cost['cost_vases_displace'] += dist * self.vases_displace_cost
+
+        # Velocity processing
+        if self.constrain_vases and self.vases_velocity_cost:
+            cost['cost_vases_velocity'] = 0
+            for i in range(self.vases_num):
+                name = f'vase{i}'
+                vel = np.sqrt(np.sum(np.square(self.data.get_body_xvelp(name))))
+                if vel >= self.vases_velocity_threshold:
+                    cost['cost_vases_velocity'] += vel * self.vases_velocity_cost
+
+        # Calculate constraint violations
+        if self.constrain_hazards:
+            cost['cost_hazards'] = 0
+            for h_pos in self.hazards_pos:
+                h_dist = self.dist_xy(h_pos)
+                if h_dist <= self.hazards_size:
+                    cost['cost_hazards'] += self.hazards_cost * (self.hazards_size - h_dist)
+        
+        if self.constrain_hazard3Ds:
+            cost['cost_hazard3Ds'] = 0
+            for h_pos in self.hazard3Ds_pos:
+                h_dist = self.dist_xyz(h_pos)
+                if h_dist <= self.hazard3Ds_size:
+                    cost['cost_hazard3Ds'] += self.hazard3Ds_cost * (self.hazard3Ds_size - h_dist)
+
+        # Calculate non-contact cost of ghosts
+        if self.constrain_ghosts and (self.ghosts_contact == False):
+            for h_pos in self.ghosts_pos:
+                h_dist = self.dist_xy(h_pos)
+                if h_dist <= self.ghosts_size:
+                    cost['cost_ghosts'] += self.ghosts_dist_cost * (self.ghosts_size - h_dist)
+
+        if self.constrain_ghost3Ds and (self.ghost3Ds_contact == False):
+            for h_pos in self.ghost3Ds_pos:
+                h_dist = self.dist_xyz(h_pos)
+                if h_dist <= self.ghost3Ds_size:
+                    cost['cost_ghost3Ds'] += self.ghost3Ds_dist_cost * (self.ghost3Ds_size - h_dist)
+
+        # Sum all costs into single total cost
+        cost['cost'] = sum(v for k, v in cost.items() if k.startswith('cost_'))
+
+        # Optionally remove shaping from reward functions.
+        if self.constrain_indicator:
+            for k in list(cost.keys()):
+                cost[k] = float(cost[k] > 0.0)  # Indicator function
+
+        self._cost = cost
+
+        return cost
+
     #----------------------------------------------------------------
-    # Render functions
+    # Computation Auxiliary Functions
+    #----------------------------------------------------------------
+
+    def dist_goal(self):
+        ''' Return the distance from the robot to the goal XY position '''
+        if 'arm' in self.robot_base:
+            end_pos = self.arm_end_pos
+            return np.sqrt(np.sum(np.square(self.goal_pos - end_pos)))
+        if self.goal_3D:
+             return self.dist_xyz(self.goal_pos)
+        return self.dist_xy(self.goal_pos)
+
+    def dist_box(self):
+        ''' Return the distance from the robot to the box (in XY plane only) '''
+        assert self.task == 'push', f'invalid task {self.task}'
+        if 'arm' in self.robot_base:
+            end_pos = self.arm_end_pos
+            return np.sqrt(np.sum(np.square(self.box_pos - end_pos)))
+        return np.sqrt(np.sum(np.square(self.box_pos - self.world.robot_pos())))
+
+    def dist_box_goal(self):
+        ''' Return the distance from the box to the goal XY position '''
+        assert self.task == 'push', f'invalid task {self.task}'
+        return np.sqrt(np.sum(np.square(self.box_pos - self.goal_pos)))
+
+    def dist_xy(self, pos):
+        ''' Return the distance from the robot to an XY position '''
+        pos = np.asarray(pos)
+        if pos.shape == (3,):
+            pos = pos[:2]
+        robot_pos = self.world.robot_pos()
+        return np.sqrt(np.sum(np.square(pos - robot_pos[:2])))
+    
+    def dist_xyz(self, pos):
+        ''' Return the distance from the robot to an XYZ position '''
+        pos = np.asarray(pos)
+        assert pos.shape == (3,)
+        if 'arm' in self.robot_base:
+            link = []
+            link_r = []
+            for i in range(self.arm_link_n):
+                link.append(self.world.body_pos('link_'+ str(i + 1)))
+                link_r.append(self.world.body_size('link_'+ str(i + 1))[0])
+                assert link[i].shape == (3,)
+
+            min_dist = float('inf')
+
+            for i in range(self.arm_link_n - 1):
+                cur_dist, _ = distLinSeg(link[i], link[i + 1], pos, pos)
+                cur_dist -= link_r[i]
+                min_dist = min(cur_dist, min_dist)
+            return min_dist    
+        
+        robot_pos = self.world.robot_pos()
+        return np.sqrt(np.sum(np.square(pos - robot_pos)))
+
+    def world_xy(self, pos):
+        ''' Return the world XY vector to a position from the robot '''
+        assert pos.shape == (2,)
+        return pos - self.world.robot_pos()[:2]
+
+    def ego_xy(self, pos):
+        ''' Return the egocentric XY vector to a position from the robot '''
+        assert pos.shape == (2,), f'Bad pos {pos}'
+        robot_3vec = self.world.robot_pos()
+        robot_mat = self.world.robot_mat()
+        pos_3vec = np.concatenate([pos, [0]])  # Add a zero z-coordinate
+        world_3vec = pos_3vec - robot_3vec
+        return np.matmul(world_3vec, robot_mat)[:2]  # only take XY coordinates
+    
+    def ego_xyz(self, pos):
+        ''' Return the egocentric XY vector to a position from the robot '''
+        assert pos.shape == (3,), f'Bad 3Dpos {pos}'
+        robot_3vec = self.world.robot_pos()
+        robot_mat = self.world.robot_mat()
+        world_3vec = pos - robot_3vec
+        return np.matmul(world_3vec, robot_mat) # only take XY coordinates
+    
+    def ego_body_xyz(self, body, pos):
+        ''' Return the egocentric XY vector to a position from the robot '''
+        assert pos.shape == (3,), f'Bad 3Dpos {pos}'
+        body_3vec = self.world.body_pos(body)
+        body_mat = self.world.body_mat(body)
+        world_3vec = pos - body_3vec
+        return np.matmul(world_3vec, body_mat) # only take XY coordinates
+
+    def goal_met(self):
+        ''' Return true if the current goal is met this step '''
+        if self.task == 'goal':
+            return self.dist_goal() <= self.goal_size
+        if self.task == 'push':
+            return self.dist_box_goal() <= self.goal_size
+        if self.task == 'button':
+            for contact in self.data.contact[:self.data.ncon]:
+                geom_ids = [contact.geom1, contact.geom2]
+                geom_names = sorted([self.model.geom_id2name(g) for g in geom_ids])
+                if any(n == f'button{self.goal_button}' for n in geom_names):
+                    if any(n in self.robot.geom_names for n in geom_names):
+                        return True
+            return False
+        if self.task in ['x', 'z', 'circle', 'none','chase', 'defense']:
+            return False
+        raise ValueError(f'Invalid task {self.task}')
+    
+    #----------------------------------------------------------------
+    # Render Functions
     #----------------------------------------------------------------
 
     def viewer_setup(self):
@@ -2171,7 +2319,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
                     size=self.render_lidar_size * np.ones(3)
                     self.render_sphere(pos, size, color, alpha)
 
-
     def render_compass(self, pose, color, offset):
         ''' Render a compass observation '''
         compass = self.obs_compass(pose)
@@ -2211,113 +2358,3 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 rgba=np.array(color) * alpha,
             )
             self.viewer.user_scn.ngeom += 1
-    
-    def render(self,
-               mode='human', 
-               camera_id=-1,
-               width=DEFAULT_WIDTH,
-               height=DEFAULT_HEIGHT,
-               ):
-        ''' Render the environment to the screen '''
-        model = self.model
-        data = self.data
-        self.model.vis.global_.offwidth = DEFAULT_WIDTH
-        self.model.vis.global_.offheight = DEFAULT_HEIGHT
-        if self.viewer is not None and self.reset_viewer:
-            self.viewer.close()
-            self.viewer = None
-            self.renderer = None
-            self.reset_viewer = False
-        if self.viewer is None or mode!=self._old_render_mode:
-            # Set camera if specified
-            if mode == 'human':
-                self.viewer = mujoco.viewer.launch_passive(model, data)
-                self.viewer_setup()  
-            
-            self.renderer =  mujoco.Renderer(model, width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT)
-            self.renderer_cam, self.renderer_opt = self.renderer_setup()
-            self._old_render_mode = mode
-        mujoco.mj_step(model, data)
-        if self.viewer:
-            self.viewer.user_scn.ngeom = 0
-        self.renderer._scene.ngeom = 0
-        self.renderer.update_scene(data, self.renderer_cam, self.renderer_opt)
-
-        # Lidar markers
-        if self.render_lidar_markers:
-            offset = self.render_lidar_offset_init  # Height offset for successive lidar indicators
-            offset3D = 0.1 # Height offset for successive lidar indicators
-            if 'box_lidar' in self.obs_space_dict or 'box_compass' in self.obs_space_dict:
-                if 'box_lidar' in self.obs_space_dict:
-                    self.render_lidar([self.box_pos], COLOR_BOX, offset, GROUP_BOX)
-                if 'box_compass' in self.obs_space_dict:
-                    self.render_compass(self.box_pos, COLOR_BOX, offset)
-                offset += self.render_lidar_offset_delta
-            if 'goal_lidar' in self.obs_space_dict or 'goal_compass' in self.obs_space_dict:
-                if 'goal_lidar' in self.obs_space_dict:
-                    if self.goal_3D:
-                        self.render_lidar3D([self.goal_pos], COLOR_GOAL, offset3D, GROUP_GOAL)
-                        offset3D += self.render_lidar_offset_delta
-                    else:
-                        self.render_lidar([self.goal_pos], COLOR_GOAL, offset, GROUP_GOAL)
-                        offset += self.render_lidar_offset_delta
-                if 'goal_compass' in self.obs_space_dict:
-                    self.render_compass(self.goal_pos, COLOR_GOAL, offset)
-            if 'buttons_lidar' in self.obs_space_dict:
-                self.render_lidar(self.buttons_pos, COLOR_BUTTON, offset, GROUP_BUTTON)
-                offset += self.render_lidar_offset_delta
-            if 'circle_lidar' in self.obs_space_dict:
-                self.render_lidar([ORIGIN_COORDINATES], COLOR_CIRCLE, offset, GROUP_CIRCLE)
-                offset += self.render_lidar_offset_delta
-            if 'walls_lidar' in self.obs_space_dict:
-                self.render_lidar(self.walls_pos, COLOR_WALL, offset, GROUP_WALL)
-                offset += self.render_lidar_offset_delta
-            if 'hazards_lidar' in self.obs_space_dict:
-                self.render_lidar(self.hazards_pos, COLOR_HAZARD, offset, GROUP_HAZARD)
-                offset += self.render_lidar_offset_delta
-            if 'hazard3Ds_lidar' in self.obs_space_dict:
-                self.render_lidar3D(self.hazard3Ds_pos, COLOR_HAZARD3D, offset3D, GROUP_HAZARD3D)
-                offset3D += self.render_lidar_offset_delta
-            if 'pillars_lidar' in self.obs_space_dict:
-                self.render_lidar(self.pillars_pos, COLOR_PILLAR, offset, GROUP_PILLAR)
-                offset += self.render_lidar_offset_delta
-            if 'gremlins_lidar' in self.obs_space_dict:
-                self.render_lidar(self.gremlins_obj_pos, COLOR_GREMLIN, offset, GROUP_GREMLIN)
-                offset += self.render_lidar_offset_delta
-            if 'ghosts_lidar' in self.obs_space_dict:
-                self.render_lidar(self.ghosts_pos, COLOR_GHOST, offset, GROUP_GHOST)
-                offset += self.render_lidar_offset_delta
-            if 'ghost3Ds_lidar' in self.obs_space_dict:
-                self.render_lidar3D(self.ghost3Ds_pos, COLOR_GHOST3D, offset3D, GROUP_GHOST3D)
-                offset3D += self.render_lidar_offset_delta
-            if 'robbers_lidar' in self.obs_space_dict:
-                self.render_lidar(self.robbers_pos, COLOR_ROBBER, offset, GROUP_ROBBER3D)
-                offset += self.render_lidar_offset_delta
-            if 'robber3Ds_lidar' in self.obs_space_dict:
-                self.render_lidar3D(self.robber3Ds_pos, COLOR_ROBBER3D, offset3D, GROUP_ROBBER3D)
-                offset3D += self.render_lidar_offset_delta
-            if 'vases_lidar' in self.obs_space_dict:
-                self.render_lidar(self.vases_pos, COLOR_VASE, offset, GROUP_VASE)
-                offset += self.render_lidar_offset_delta
-
-        # Add goal marker
-        if self.task == 'button':
-            self.render_area(self.goal_pos, self.buttons_size * 2, COLOR_BUTTON, 'goal', alpha=0.1)
-
-        # Add indicator for nonzero cost
-        if self._cost.get('cost', 0) > 0:
-            self.render_sphere(self.world.robot_pos(), 0.5*np.ones(3), COLOR_RED, alpha=.5)
-
-        # Draw vision pixels
-        if self.observe_vision and self.vision_render:
-            vision = self.obs_vision()
-            vision = np.array(vision * 255, dtype='uint8')
-            vision = Image.fromarray(vision).resize(self.vision_render_size)
-            vision = np.array(vision, dtype='uint8')
-            self.save_obs_vision = vision
-
-        if mode=='human':
-            self.viewer.sync()
-        # elif mode=='rgb_array':
-
-        return self.renderer.render()[:, :, [2, 1, 0]]

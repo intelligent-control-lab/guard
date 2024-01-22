@@ -5,29 +5,13 @@ import xmltodict
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
-# from mujoco_py import const, load_model_from_path, load_model_from_xml, MjSim, MjViewer, MjRenderContextOffscreen
 import mujoco
 import safe_rl_envs
 import sys
 
 '''
-Tools that allow the Safety Gym Engine to interface to MuJoCo.
+Tools that allow the Engine to interface to MuJoCo.
 
-The World class owns the underlying mujoco scene and the XML,
-and is responsible for regenerating the simulator.
-
-The way to use this is to configure a World() based on your needs 
-(number of objects, etc) and then call `world.reset()`.
-
-*NOTE:* The simulator should be accessed as `world.sim` and not just
-saved separately, because it may change between resets.
-
-Configuration is idiomatically done through Engine configuration,
-so any changes to this configuration should also be reflected in 
-changes to the Engine.
-
-TODO:
-- unit test scaffold
 '''
 
 # Default location to look for /xmls folder:
@@ -85,19 +69,6 @@ class World:
             assert key in self.DEFAULT, f'Bad key {key}'
             setattr(self, key, value)
 
-    # @property
-    # def data(self):
-    #     ''' Helper to get the simulation data instance '''
-    #     return self.data
-    
-    # @property
-    # def model(self):
-    #     ''' Helper to get the simulation model instance '''
-    #     return self.model
-
-    # TODO: remove this when mujoco-py fix is merged and a new version is pushed
-    # https://github.com/openai/mujoco-py/pull/354
-    # Then all uses of `self.world.get_sensor()` should change to `self.data.get_sensor`.
     def get_sensor(self, name):
         id = self.model.sensor(name).id
         adr = self.model.sensor_adr[id]
@@ -317,23 +288,9 @@ class World:
             worldbody['body'].append(body['body'])
 
         # Instantiate simulator
-        # print(xmltodict.unparse(self.xml, pretty=True))
         self.xml_string = xmltodict.unparse(self.xml)
         self.model = mujoco.MjModel.from_xml_string(self.xml_string)
         self.data = mujoco.MjData(self.model)
-        # with open('result.xml', 'w') as result_file:
-        #     result_file.write(xmltodict.unparse(self.xml, pretty=True))
-        
-        
-
-        # Add render contexts to newly created sim
-        # if self.render_context is None and self.observe_vision:
-        #     render_context = MjRenderContextOffscreen(self, device_id=-1, quiet=True)
-        #     render_context.vopt.geomgroup[:] = 1
-        #     self.render_context = render_context
-
-        # if self.render_context is not None:
-        #     self.render_context.update_sim(self)
 
         # Recompute simulation intrinsics from new position
         mujoco.mj_forward(self.model, self.data)
@@ -342,8 +299,6 @@ class World:
         ''' Build a new sim from a model if the model changed '''
         if state:
             old_state = self.get_state()
-        #self.config.update(deepcopy(config))
-        #self.parse(self.config)
         self.parse(config)
         self.build()
         if state:
@@ -356,24 +311,6 @@ class World:
             self.build()
         # set flag so that renderer knows to update sim
         self.update_viewer_sim = True
-
-    # def render(self, mode='human'):
-    #     ''' Render the environment to the screen '''
-    #     if self.viewer is None:
-    #         self.viewer = MjViewer(self)
-    #         # Turn all the geom groups on
-    #         self.viewer.vopt.geomgroup[:] = 1
-    #         # Set camera if specified
-    #         if mode == 'human':
-    #             self.viewer.cam.fixedcamid = -1
-    #             self.viewer.cam.type = mjCAMERA_FREE
-    #         else:
-    #             self.viewer.cam.fixedcamid = self.model.camera_name2id(mode)
-    #             self.viewer.cam.type = mjCAMERA_FIXED
-    #     if self.update_viewer_sim:
-    #         self.viewer.update_sim(self)
-    #         self.update_viewer_sim = False
-    #     self.viewer.render()
 
     def robot_com(self):
         ''' Get the position of the robot center of mass in the simulator world reference frame '''
