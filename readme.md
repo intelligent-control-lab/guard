@@ -155,6 +155,13 @@ python cpo.py --task Goal_Point_8Hazards --seed 1
 ```
 Training logs (e.g., config, model) will be saved under `<algo>/logs/` (in the above example `cpo/logs/`).
 
+#### Train with Other Environments
+
+You can easily change the algorithm runtime environment to another environment library that **supports the gym interface** by following these steps：
+
+- Add necessary paramaters for build external environment to parameter `arg` in main. (Optional) 
+- Import the desired environment and initialize it in `create_env` function.
+
 ### 4. Viualization
 To test a trained RL agent on a task and save the video:
 ```
@@ -240,13 +247,6 @@ We encourage users to submit issues for bugs, feature requests, or general feedb
 
 
 ### Expansion
-
-#### Other Environments
-
-You can easily change the algorithm runtime environment to another environment library that **supports the gym interface** by following these steps：
-
-- Add necessary paramaters for build external environment to parameter `arg` in main. (Optional) 
-- Import the desired environment and initialize it in `create_env` function.
 
 **Realistic Robot Options:**
 With the upgraded Mujoco3 Engine, we aim to add a variety of [realistic robot options](https://mujoco.readthedocs.io/en/stable/models.html) for both moving and manipulating robots. This improvement will enable realistic simulations, paving the way for safe real-world robot experiments through simulation-to-reality transfer.
