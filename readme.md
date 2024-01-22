@@ -1,7 +1,5 @@
 # GUARD: **G**eneralized **U**nified S**A**fe **R**einforcement Learning **D**evelopment Benchmark
 
-Paper link: [GUARD: A Safe Reinforcement Learning Benchmark](https://arxiv.org/abs/2305.13681)
-
 GUARD is a highly customizable generalized benchmark with a wide variety of RL agents, tasks, and safety constraint specifications.
 GUARD comprehensively covers state-of-the-art safe RL algorithms with self-contained implementations. 
 
@@ -19,14 +17,10 @@ Supported algorithms in the GUARD Safe RL library include:
 - [TRPO-Feasible Actor Critic (FAC)](https://arxiv.org/abs/2105.10682)
 - [TRPO-Interior-point Policy Optimization (IPO)](https://arxiv.org/abs/1910.09615)
 - [Projection-based Constrained Policy Optimization (PCPO)](https://arxiv.org/abs/2010.03152)
-- [Primal-Dual Optimization (PDO)](https://arxiv.org/abs/1512.01629) (not in paper)
-- [State-wise Constrained Policy Optimization (SCPO)] (not in paper)
-  - To download SCPO code, run `git submodule update --init --recursive` after cloning this repo.
 
 **Hierarchical**
 - [TRPO-Safety Layer (SL)](https://arxiv.org/abs/1801.08757)
 - [TRPO-Unrolling Safety Layer (USL)](https://arxiv.org/abs/2206.08528)
-- [Lyapunov-based Safe Policy Optimization (LPG)](https://arxiv.org/abs/1901.10031) (not in paper)
 
 GUARD testing suite supports the following agents:
 - Swimmer
@@ -600,15 +594,4 @@ The configurable tasks from GUARD will be seamlessly integrated into GUARD-X. Wi
 We welcome feedback and suggestions on how we can improve this maintenance and expansion plan. Feel free to open an issue to share your thoughts and ideas.
 
 
-
----
-## Citing GUARD
-```
-@article{zhao2023guard,
-  title={GUARD: A Safe Reinforcement Learning Benchmark},
-  author={Zhao, Weiye and Chen, Rui and Sun, Yifan and Li, Feihan and Liu, Ruixuan and Wei, Tianhao and Liu, Changliu},
-  journal={arXiv preprint arXiv:2305.13681},
-  year={2023}
-}
-```
 
