@@ -395,6 +395,91 @@ https://mujoco.readthedocs.io/en/stable/XMLreference.html  -->
 </mujoco>
 
 ```
+### Introduction to the structure of the safe RL library
+
+All RL methods are situated in `safe_rl_lib/`. Each method, denoted as `algo` below, comprises two essential components:
+
+1. **`algo_core.py`**: Defines the structures of all policy networks, directly callable in `algo.py`. Users can craft their custom RL policy structures within this core script.
+
+2. **`algo.py`**: Encompasses the main training pipeline of the algorithm. The key components are introduced as follows:
+
+```python
+import algo_core as core
+
+#----------------------------------------------------------------
+class AlgoBuffer:
+    '''
+        Data buffer for storing all training data, including:
+        - Observation
+        - Action
+        - Advantage
+        - Reward
+        - Value
+        - Other data needed by the algorithm
+    '''
+#----------------------------------------------------------------
+
+
+#----------------------------------------------------------------
+# Computation Auxiliary Functions
+# 
+# Functions utilized by the algorithms to calculate intermediate variables
+#----------------------------------------------------------------
+
+
+#----------------------------------------------------------------
+def algo(env_fn):
+    '''
+        The central part of the algorithm for training and data collection.
+        Takes the environment and all training parameters as input.
+    '''
+    #----------------------------------------------------------------
+    # Loss Functions
+    # 
+    # Functions for defining loss during training. 
+    # Add your own custom loss functions here if needed.
+    #----------------------------------------------------------------
+
+    #----------------------------------------------------------------
+    def update(self):
+        '''
+            Update function called at the end of each training epoch.
+            Define your own update rule here if needed.
+        '''
+    #----------------------------------------------------------------
+    
+    #----------------------------------------------------------------
+    # Training Loop
+    # 
+    # Core training loop comprising the following steps:
+    #   1. Interaction between the RL policy defined in the core and the environment.
+    #   2. Collection of data from the environment, stored in AlgoBuffer.
+    #   3. Execution of the update() function with the collected data.
+    #----------------------------------------------------------------     
+
+#----------------------------------------------------------------
+
+
+#----------------------------------------------------------------  
+def create_env(args):
+    '''
+        Construct the environment based on the user-defined configuration.
+    '''
+#----------------------------------------------------------------
+
+
+#----------------------------------------------------------------
+if __name__ == '__main__':
+    '''
+        Main function:
+
+        1. Retrieve arguments from user input.
+        2. Invoke the algo() function to initiate the training process.
+    '''
+#----------------------------------------------------------------
+```
+ 
+
 ---
 ## Contributing to GUARD
 
