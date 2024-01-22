@@ -173,16 +173,111 @@ python utils/plot.py comparison/ --title <title name> --reward --cost
 \<title name\> can be anything that describes the current comparison (e.g., "all end-to-end methods").
 
 
-<!-- ---
-## Reproduceing Paper Results
-@Weiye -->
+## Contributing to GUARD
+
+Welcome to GUARD! We appreciate your interest in contributing to this project. Whether you want to report a bug, suggest a feature, or contribute code, please follow the guidelines outlined below.
+
+### Issues and Bugs
+
+If you encounter any issues or find a bug, please open an issue on the [issue tracker](https://github.com/intelligent-control-lab/guard/issues). When reporting a bug, include a detailed description, steps to reproduce, and your system configuration.
+
+### Feature Requests
+
+If you have a feature request, please open an issue on the [issue tracker](https://github.com/intelligent-control-lab/guard/issues). Clearly describe the new feature you'd like to see and why it would be valuable.
+
+### Pull Requests
+
+We welcome contributions! If you'd like to contribute code, follow these steps:
+
+1. Fork the repository and create a new branch.
+2. Make your changes and test them thoroughly.
+3. Ensure your code follows the existing code style and conventions.
+4. Write clear and concise commit messages explaining your changes.
+5. Open a pull request, linking to any relevant issues and providing a detailed description of your changes.
+
+### Coding Guidelines and Style of Conventions
+
+- Follow the [coding style guide](CODE_OF_CONDUCT.md) of the project.
+- Adhere to [PEP 8 style guidelines](https://peps.python.org/pep-0008/) for Python code.
+- Use descriptive variable and function names. For example, (i) ```mlp``` stands for ```Multilayer Perceptron```, (ii) ```_d_kl()``` stands for ```KL Divergence computation function```.
+- Add comments to explain complex function using the following formats.
+```python
+def func1(arg1, arg2)
+    """
+    Introduction of this function.
+    Additional detailed description.
+    """
+```
+
+```python
+def func2(arg1, arg2)
+    '''Description of this function'''
+```
+- Write clear and concise commit messages.
+
+
+### Code Reviews
+- All pull requests will be reviewed by project maintainers.
+- Be prepared to address any feedback or questions from reviewers.
+
+### Additional Tips
+- Before starting work on a major feature, discuss it with the maintainers first to ensure it aligns with the project's goals.
+- Break down large changes into smaller, more manageable pull requests.
+- Be patient and respectful during the code review process.
+- Thank you for your interest in contributing to GUARD!
+
+
+
+## Maintaining and Expanding GUARD
+
+To ensure the long-term maintenance and growth of this code repository, we have outlined the following plan:
+
+### Maintenance
+
+**Regular Updates:**
+We are committed to keeping GUARD up-to-date with the latest advancements in (i) [Mujoco Simulation Engine](https://mujoco.readthedocs.io/en/stable/overview.html); (ii) [Pytorch Toolbox](https://pytorch.org/) and addressing any potential issues. Regular updates will include bug fixes, feature improvements, and compatibility with new dependencies.
+
+**Responsive Issue Management:**
+We encourage users to submit issues for bugs, feature requests, or general feedback. Our team will actively monitor the [issue tracker](https://github.com/intelligent-control-lab/guard/issues) and respond promptly to address reported problems or discuss proposed enhancements.
+
+
+### Expansion
+
+#### Other Environments
+
+You can easily change the algorithm runtime environment to another environment library that **supports the gym interface** by following these steps：
+
+- Add necessary paramaters for build external environment to parameter `arg` in main. (Optional) 
+- Import the desired environment and initialize it in `create_env` function.
+
+#### New Features
+
+We welcome contributions that introduce new features or improvements to existing ones. If you have ideas for enhancing Safety Gym, please open an issue to discuss the proposed changes before submitting a pull request.
+
+#### Community Involvement
+
+We aim to build a vibrant community around Safety Gym. Contributions from the community, including code submissions, bug reports, and feature requests, are crucial for the project's growth. Engage with the community through discussions, forums, and collaborative efforts.
+
+#### Documentation
+
+Maintaining comprehensive and up-to-date documentation is key to the usability of Safety Gym. We encourage contributors to document new features and help improve existing documentation.
+
+### Roadmap
+
+We have outlined a roadmap for the future development of Safety Gym, which can be found in the [ROADMAP.md](link_to_your_roadmap_file). This document provides insights into upcoming features, milestones, and goals for the project.
+
+### Feedback and Suggestions
+
+We welcome feedback and suggestions on how we can improve this maintenance and expansion plan. Feel free to open an issue to share your thoughts and ideas.
+
+
 
 ---
 ## Citing GUARD
 ```
 @article{zhao2023guard,
   title={GUARD: A Safe Reinforcement Learning Benchmark},
-  author={Zhao, Weiye and Chen, Rui and Sun, Yifan and Liu, Ruixuan and Wei, Tianhao and Liu, Changliu},
+  author={Zhao, Weiye and Chen, Rui and Sun, Yifan and Li, Feihan and Liu, Ruixuan and Wei, Tianhao and Liu, Changliu},
   journal={arXiv preprint arXiv:2305.13681},
   year={2023}
 }
