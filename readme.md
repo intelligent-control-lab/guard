@@ -92,7 +92,7 @@ For a complete list of pre-configured environments, see below.
 
 To create a custom environment using the GUARD Safe RL engine, update the `safe_rl_env_config.py` with custom configurations. For example, to build an environment with a drone robot, the chase task, two dynamic targets, some 3D ghosts,  with constraints on entering the 3D ghosts areas. Add the following configuration to `safe_rl_env_config.py`:
 
-```
+```python
 if task == "Custom_Env":
   config = {
               # robot setting
@@ -172,6 +172,223 @@ python utils/plot.py comparison/ --title <title name> --reward --cost
 
 \<title name\> can be anything that describes the current comparison (e.g., "all end-to-end methods").
 
+## Build on top of GUARD
+
+### Introduction to the structure of Engine
+The Engine class serves as the core of the GUARD environment and is defined in `safe_rl_envs/safe_rl_envs/envs/engine.py`. The main sections of the Engine class are described below.
+```python
+class Engine(gym.Env):
+
+    # Default configuration
+    DEFAULT = {
+    }
+    
+    #----------------------------------------------------------------
+    # Property Functions
+    # 
+    # Wrappers to extract attributes, such as object positions, 
+    # from simulation data.
+    #----------------------------------------------------------------
+    
+    #----------------------------------------------------------------
+    # Gym API
+    # 
+    # General Gym API including step(), reset() and render()
+    # https://gymnasium.farama.org/api/env/
+    #----------------------------------------------------------------
+    
+    #----------------------------------------------------------------
+    # Environment Configuration Functions
+    #
+    # Functions for constructing a new environment using build():
+    # 1. Construct dictionaries of all objects, including:
+    #    - build_placements_dict()
+    #    - placements_dict_from_object()
+    #    - build_mocap_dict()
+    #    - build_world_config()
+    # 2. Sample a feasible layout to reset the environment, including:
+    #    - build_layout()
+    #    - draw_placement()
+    #    - constrain_placement()
+    #    - sample_layout()
+    #    - placements_from_location()
+    # 3. Sample feasible goal positions to reset the environment, including:
+    #    - build_goal()
+    #    - build_goal_button()
+    #    - build_goal_position()
+    #    - sample_goal_position()
+    #----------------------------------------------------------------
+    
+    #----------------------------------------------------------------
+    # Environment Update Functions
+    # 
+    # Functions for inner updates of the environment:
+    # 1. Update mocap objects based on their dynamics, including:
+    #    - set_mocaps()
+    #    - set_mocap_pos()
+    #    - set_mocaps_ghosts()
+    #    - set_mocaps_ghost3Ds()
+    #    - set_mocaps_robbers()
+    #    - set_mocaps_robber3Ds()
+    #    - update_layout()
+    # 2. Update the button timer:
+    #    - buttons_timer_tick()
+    #----------------------------------------------------------------
+
+    #----------------------------------------------------------------
+    # Observation, Reward, and Cost Functions
+    #   
+    # 1. Functions to obtain information from the environment, including:
+    #    - obs()
+    #    - reward() 
+    #    - cost()
+    # 2. Helper functions for obtaining observations, including:
+    #    - obs_compass()
+    #    - obs_vision()
+    #    - obs_lidar()
+    #    - obs_lidar3D()
+    #    - obs_lidar_pseudo()
+    #    - obs_lidar_pseudo3D()  
+    #----------------------------------------------------------------
+
+    #----------------------------------------------------------------
+    # Computation Auxiliary Functions
+    #
+    # This section contains helper functions for calculating distances
+    # between objects in the environment. 
+    # Users can also add their own custom functions here if needed.
+    #----------------------------------------------------------------
+
+    #----------------------------------------------------------------
+    # Render Functions
+    # 
+    # Helper functions for the render() function.
+    #----------------------------------------------------------------
+```
+
+### An example of defining a customized task using the Engine
+
+For a clearer understanding of the Engine's structure, we provide an illustrative example. Let's define a new task named "`CollectVase`" In this task, the robot's objective is to relocate vases (small box objects) towards the center point while ensuring robot itself remains within a specified circular area around the center point. Achieving this goal involves incorporating two code snippets into the `reward()` and `cost()` functions.
+```python
+class Engine(gym.Env, gym.utils.EzPickle):
+
+    # Default configuration
+    DEFAULT = {
+        'task': 'CollectVase',
+        'position_limit': 2.0,
+        'constrain_position': True,
+        'robot_base': 'xmls/myRobot.xml',
+    }
+    
+    #----------------------------------------------------------------
+    # Property Functions
+    #----------------------------------------------------------------
+    
+    #----------------------------------------------------------------
+    # Gym API
+    #----------------------------------------------------------------
+    
+    def reset(self):
+        ''' Integrate the provided code below into the original implementation '''
+        self.last_vase_dist = None
+    
+    #----------------------------------------------------------------
+    # Environment Configuration Functions
+    #----------------------------------------------------------------
+    
+    #----------------------------------------------------------------
+    # Environment Update Functions
+    #----------------------------------------------------------------
+
+    #----------------------------------------------------------------
+    # observation, reward and cost functions
+    #----------------------------------------------------------------
+
+    def reward(self):
+        reward = 0.0
+        ''' Integrate the provided code below into the original implementation '''
+        if self.task == "CollectVase" and self.last_vase_dist:
+            vase_dist = self.average_vase_dist()
+            reward += self.last_vase_dist - vase_dist
+            self.last_vase_dist = vase_dist
+    
+    def cost(self):
+        cost = {}
+        ''' Integrate the provided code below into the original implementation '''
+        if self.constrain_position:
+            robot_com = self.world.robot_com()
+            x, y, _ = robot_com
+            radius = np.sqrt(x**2 + y**2)
+            cost['position'] = 0
+            if radius > self.position_limit:
+                cost['position'] = radius - self.position_limit
+
+    #----------------------------------------------------------------
+    # Computation Auxiliary Functions
+    #----------------------------------------------------------------
+    
+    def average_vase_dist(self):
+        ''' Calculate the mean distance from every vase to the origin point '''
+        pass
+    
+    #----------------------------------------------------------------
+    # Render Functions
+    #----------------------------------------------------------------
+
+```
+
+### Template for defining a customized robot with xml format.
+Consult the template below if you intend to define a new robot. Ensure that the name of the robot body is set to "robot" for compatibility with GUARD.
+```xml
+<!-- for detailed information, please consult the Mujoco XML reference at 
+https://mujoco.readthedocs.io/en/stable/XMLreference.html  -->
+<mujoco>
+    <worldbody>
+        <geom name="floor" size="5 5 0.1" type="plane" condim="6"/>
+        <body name="robot" pos="0 0 .1">
+            <!-- Define your robot here 
+            A robot can be constructed using a series of items, including:
+                - Geom: [Geom Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#body-geom)
+                - Joint: [Joint Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#body-joint)
+                - Site: [Site Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#body-site)
+                
+            A robot body can also be constructed from sub-bodies:
+                - Body: [Body Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#body)
+            -->
+        </body>
+    </worldbody>
+    <sensor>
+        <!-- Define your sensors here 
+        Sensors are crucial for capturing the state of the environment from the perspective of robots. Common sensors include:
+            - Accelerometer: [Accelerometer Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#sensor-accelerometer)
+            - Velocimeter: [Velocimeter Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#sensor-velocimeter)
+            - Gyro: [Gyro Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#sensor-gyro)
+            - Touch Sensor: [Touch Sensor Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#sensor-touch)
+            - Joint Position Sensor: [Joint Position Sensor Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#sensor-jointpos)
+            - Joint Velocity Sensor: [Joint Velocity Sensor Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#sensor-jointvel)
+
+        For more sensors, please refer to: [Sensor Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#sensor)
+        -->
+
+        <!-- Used for intrinsic constraints -->
+        <subtreecom body="robot" name="subtreecom"/>
+        <subtreelinvel body="robot" name="subtreelinvel"/>
+        <subtreeangmom body="robot" name="subtreeangmom"/>
+    </sensor>
+    <actuator>
+        <!-- Define your actuator here
+        Actuators are essential for moving the joints of a robot based on actions. Commonly used actuators include:
+            - General Actuator: [General Actuator Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#actuator-general)
+            - Motor Actuator: [Motor Actuator Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#actuator-motor)
+            - Position Actuator: [Position Actuator Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#actuator-position)
+            - Velocity Actuator: [Velocity Actuator Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#actuator-velocity)
+
+        For more actuators, please refer to: [Actuator Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#actuator)
+        -->
+    </actuator>
+</mujoco>
+
+```
 
 ## Contributing to GUARD
 
