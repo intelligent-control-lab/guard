@@ -241,6 +241,13 @@ We encourage users to submit issues for bugs, feature requests, or general feedb
 
 ### Expansion
 
+#### Other Environments
+
+You can easily change the algorithm runtime environment to another environment library that **supports the gym interface** by following these steps：
+
+- Add necessary paramaters for build external environment to parameter `arg` in main. (Optional) 
+- Import the desired environment and initialize it in `create_env` function.
+
 **Realistic Robot Options:**
 With the upgraded Mujoco3 Engine, we aim to add a variety of [realistic robot options](https://mujoco.readthedocs.io/en/stable/models.html) for both moving and manipulating robots. This improvement will enable realistic simulations, paving the way for safe real-world robot experiments through simulation-to-reality transfer.
 
@@ -296,7 +303,7 @@ We welcome feedback and suggestions on how we can improve this maintenance and e
 ```
 @article{zhao2023guard,
   title={GUARD: A Safe Reinforcement Learning Benchmark},
-  author={Zhao, Weiye and Chen, Rui and Sun, Yifan and Liu, Ruixuan and Wei, Tianhao and Liu, Changliu},
+  author={Zhao, Weiye and Chen, Rui and Sun, Yifan and Li, Feihan and Liu, Ruixuan and Wei, Tianhao and Liu, Changliu},
   journal={arXiv preprint arXiv:2305.13681},
   year={2023}
 }

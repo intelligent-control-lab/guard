@@ -15,7 +15,7 @@ from  safe_rl_envs.envs.engine import Engine as  safe_rl_envs_Engine
 from utils.safe_rl_env_config import configuration
 import os.path as osp
 
-device = torch.device("cuda:6" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 EPS = 1e-8
 class UslBuffer:
     """
@@ -305,7 +305,6 @@ def usl(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, step
         
         # Average KL Divergence  
         pi, logp = cur_pi(obs, act)
-        # average_kl = (logp_old - logp).mean()
         average_kl = cur_pi._d_kl(
             torch.as_tensor(obs, dtype=torch.float32),
             torch.as_tensor(mu_old, dtype=torch.float32),
@@ -322,7 +321,6 @@ def usl(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, step
         
         # Policy loss 
         pi, logp = cur_pi(obs, act)
-        # loss_pi = -(logp * adv).mean()
         ratio = torch.exp(logp - logp_old)
         loss_pi = -(ratio * adv).mean()
         
@@ -428,10 +426,11 @@ def usl(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, step
 
     # Prepare for interaction with environment
     start_time = time.time()
-    # o, ep_ret, ep_len = env.reset(), 0, 0
     while True:
         try:
             o, ep_ret, ep_len = env.reset(), 0, 0
+            if isinstance(o, tuple):
+                o = o[0]
             break
         except:
             print('reset environment is wrong, try next reset')
@@ -451,7 +450,12 @@ def usl(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, step
                 a_safe = a 
                     
             try: 
-                next_o, r, d, info = env.step(a_safe)
+                rets = env.step(a_safe)
+                if len(rets) == 4:
+                    next_o, r, d, info = rets
+                else:
+                    next_o, r, d1, d2, info = rets
+                    d = d1 or d2
                 assert 'cost' in info.keys()
             except: 
                 # simulation exception discovered, discard this episode 
@@ -488,10 +492,11 @@ def usl(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, step
                 if terminal:
                     # only save EpRet / EpLen / EpCost if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len, EpCost=ep_cost)
-                # o, ep_ret, ep_len = env.reset(), 0, 0
                 while True:
                     try:
                         o, ep_ret, ep_len = env.reset(), 0, 0
+                        if isinstance(o, tuple):
+                            o = o[0]
                         break
                     except:
                         print('reset environment is wrong, try next reset')
@@ -532,7 +537,12 @@ def usl(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, step
         
         
 def create_env(args):
+    '''
+    Build the environment from the configuration file
+    '''
     env =  safe_rl_envs_Engine(configuration(args.task))
+    # You can also use other environment with standard gym interfaces
+    # For futher details, please refer to https://www.gymlibrary.dev/api/core/
     return env
 
 if __name__ == '__main__':
