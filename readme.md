@@ -34,16 +34,9 @@ GUARD testing suite supports the following agents:
 
 GUARD testing suite supports the following tasks:
 - Goal
-<img src="https://github.com/intelligent-control-lab/guard/assets/91172531/97270fed-af6d-44e0-b246-71845aba1932" width="400"/>
-
 - Push
-<img src="https://github.com/intelligent-control-lab/guard/assets/91172531/c3b304cc-c32f-4ea5-9328-2c6e48f26a11" width="400"/>
-
 - Chase
-<img src="https://github.com/intelligent-control-lab/guard/assets/91172531/b54a50d2-fd67-4532-8560-c803de4bf269" width="400"/>
-
 - Defense
-<img src="https://github.com/intelligent-control-lab/guard/assets/91172531/03b48a0c-1d5e-4fa8-a6d7-782a475ad5e8" width="400"/>
 
 GUARD testing suite supports the following safety constraints (obstacles):
 - 3D Hazards
@@ -481,11 +474,11 @@ Welcome to GUARD! We appreciate your interest in contributing to this project. W
 
 ### 1. Issues and Bugs
 
-If you encounter any issues or find a bug, please open an issue on the [issue tracker](https://github.com/intelligent-control-lab/guard/issues). When reporting a bug, include a detailed description, steps to reproduce, and your system configuration.
+If you encounter any issues or find a bug, please open an issue on the [issue tracker]. When reporting a bug, include a detailed description, steps to reproduce, and your system configuration.
 
 ### 2. Feature Requests
 
-If you have a feature request, please open an issue on the [issue tracker](https://github.com/intelligent-control-lab/guard/issues). Clearly describe the new feature you'd like to see and why it would be valuable.
+If you have a feature request, please open an issue on the [issue tracker]. Clearly describe the new feature you'd like to see and why it would be valuable.
 
 ### 3. Pull Requests
 
@@ -540,7 +533,7 @@ To ensure the long-term maintenance and growth of this code repository, we have 
 We are committed to keeping GUARD up-to-date with the latest advancements in (i) [Mujoco Simulation Engine](https://mujoco.readthedocs.io/en/stable/overview.html); (ii) [Pytorch Toolbox](https://pytorch.org/) and addressing any potential issues. Regular updates will include bug fixes, feature improvements, and compatibility with new dependencies.
 
 **Responsive Issue Management:**
-We encourage users to submit issues for bugs, feature requests, or general feedback. Our team will actively monitor the [issue tracker](https://github.com/intelligent-control-lab/guard/issues) and respond promptly to address reported problems or discuss proposed enhancements.
+We encourage users to submit issues for bugs, feature requests, or general feedback. Our team will actively monitor the [issue tracker] and respond promptly to address reported problems or discuss proposed enhancements.
 
 
 ### 2. Expansion
