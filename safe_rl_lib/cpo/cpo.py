@@ -314,7 +314,7 @@ def cpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         """
         Return the sample average KL divergence between old and new policies
         """
-        obs, mu_old, logstd_old = data['obs'], data['act'], data['adv'], data['logp'], data['mu'], data['logstd']
+        obs, mu_old, logstd_old = data['obs'], data['mu'], data['logstd']
         
         average_kl = cur_pi._d_kl(
             torch.as_tensor(obs, dtype=torch.float32),

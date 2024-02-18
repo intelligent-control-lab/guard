@@ -301,10 +301,9 @@ def usl(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, step
         """
         Return the sample average KL divergence between old and new policies
         """
-        obs, act, adv, logp_old, mu_old, logstd_old = data['obs'], data['act'], data['adv'], data['logp'], data['mu'], data['logstd']
+        obs, mu_old, logstd_old = data['obs'], data['mu'], data['logstd']
         
         # Average KL Divergence  
-        pi, logp = cur_pi(obs, act)
         average_kl = cur_pi._d_kl(
             torch.as_tensor(obs, dtype=torch.float32),
             torch.as_tensor(mu_old, dtype=torch.float32),
