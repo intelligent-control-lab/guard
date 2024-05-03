@@ -62,34 +62,35 @@ def run_random(env_name):
     #     }
     config = {
             # robot setting
-            'robot_base': 'xmls/ant.xml',  
+            'robot_base': 'xmls/drone.xml', 
 
             # task setting
-            'task': 'defense',
+            'task': 'goal',
+            'goal_3D': True,
+            'goal_z_range': [0.5,1.5],
             'goal_size': 0.5,
 
             # observation setting
-            'observe_robbers': True,  # Observe the goal with a lidar sensor
-            'observe_hazards': True,  # Observe the vector from agent to hazards
+            'observe_goal_comp': True,  # Observe the goal with a lidar sensor
+            'observe_hazard3Ds': True,  # Observe the vector from agent to hazards
+            'compass_shape': 3,
             'sensors_obs': ['accelerometer', 'velocimeter', 'gyro', 'magnetometer',
-                            'touch_ankle_1a', 'touch_ankle_2a', 'touch_ankle_3a', 'touch_ankle_4a',
-                            'touch_ankle_1b', 'touch_ankle_2b', 'touch_ankle_3b', 'touch_ankle_4b'],
-
+                            'touch_p1a', 'touch_p1b', 'touch_p2a', 'touch_p2b',
+                            'touch_p3a', 'touch_p3b', 'touch_p4a', 'touch_p4b'],
+            
             # constraint setting
-            'constrain_hazards': True,  # Constrain robot from being in hazardous areas
+            'constrain_hazard3Ds': True,  # Constrain robot from being in hazardous areas
             'constrain_indicator': False,  # If true, all costs are either 1 or 0 for a given step. If false, then we get dense cost.
 
             # lidar setting
-            'lidar_num_bins': 16,
+            'lidar_num_bins': 10,
+            'lidar_num_bins3D': 6,
             
             # object setting
-            'hazards_num': 8,
-            'hazards_size': 0.3,
-            'robbers_num': 2,
-            'robbers_size': 0.3,
+            'hazard3Ds_num': 8,
+            'hazard3Ds_size': 0.3,
+            'hazard3Ds_z_range': [0.5, 1.5],
         }
-    config['num_steps']=2000
-    config['robot_rot']=0
     env = Engine(config)
     obs = env.reset()
     done = False
