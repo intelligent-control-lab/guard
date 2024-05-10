@@ -1,6 +1,7 @@
 # GUARD: **G**eneralized **U**nified S**A**fe **R**einforcement Learning **D**evelopment Benchmark
 
-Accepted to **Transaction of Machine Learning Research, 2024**
+## Accepted to Transaction of Machine Learning Research, 2024
+
 Paper link: [GUARD: A Safe Reinforcement Learning Benchmark](https://openreview.net/forum?id=kZFKwApeQO)
 
 GUARD is a highly customizable generalized benchmark with a wide variety of RL agents, tasks, and safety constraint specifications.
