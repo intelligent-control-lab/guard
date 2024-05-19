@@ -591,9 +591,9 @@ The configurable tasks from GUARD will be seamlessly integrated into GUARD-X. Wi
 
 | Task               | Start Date | End Date   | Status          |
 |--------------------|------------|------------|-----------------|
-| Realistic Robot Options          | 2024-01-10 | 2024-05-15 | In Progress     |
-| Expanded Unconstrained and Constrained RL Library    | 2024-01-14 | 2024-05-01 | In Progress    |
-| GUARD-X        | 2023-12-15 | 2024-06-01 | In Progress         |
+| Realistic Robot Options          | 2024-01-10 | TBA | In Progress     |
+| Expanded Unconstrained and Constrained RL Library    | 2024-01-14 | TBA | In Progress    |
+| GUARD-X        | 2023-12-15 | TBA | In Progress         |
 
 **Note:** These timelines are tentative and subject to change based on available resources and community feedback.
 
