@@ -2,7 +2,7 @@
   <compiler angle="degree" coordinate="local" inertiafromgeom="true"/>
   <default>
     <joint armature="1" damping="1" limited="true"/>
-    <geom conaffinity="1" condim="6" contype="1" margin="0.001" rgba="1 0 0 1" solimp=".8 .8 .01" solref=".02 1"/>
+    <geom conaffinity="1" condim="6" contype="1" margin="0.001" rgba="1 0.6 0 1" solimp=".8 .8 .01" solref=".02 1"/>
     <motor ctrllimited="true" ctrlrange="-.4 .4"/>
     <site size="0.2" type="sphere" rgba="0 0 1 0"/>
   </default>

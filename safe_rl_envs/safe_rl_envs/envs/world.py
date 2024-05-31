@@ -105,15 +105,23 @@ class World:
             equality['weld'] = []
 
         # Add asset section if missing
+        
+        # <texture type="skybox" builtin="gradient" rgb1="0.527 0.582 0.906" rgb2="0.1 0.1 0.35"
+        #     width="800" height="800" markrgb="1 1 1" mark="random" random="0.001"/>
+        
         asset = xmltodict.parse(f'''
             <asset>
                 <texture name="texplane" builtin="checker" height="100" width="100"
                     rgb1="0.7 0.7 0.7" rgb2="0.8 0.8 0.8" type="2d"/>
-                <texture type="skybox" builtin="gradient" rgb1="0.527 0.582 0.906" rgb2="0.1 0.1 0.35"
-                    width="800" height="800" markrgb="1 1 1" mark="random" random="0.001"/>
                 <material name="MatPlane" reflectance="0.1" shininess="0.1" specular="0.1"
                     texrepeat="10 10" texture="texplane"/>
-                    
+                <texture name="texplane2" builtin="checker" height="100" width="100"
+                    rgb1="0.8 0.8 0.8" rgb2="0.6 0.6 0.6" type="2d"/>
+                <texture name="my_texture" type="2d" file="xmls/image.png"/>
+                <texture type="skybox" builtin="gradient" rgb1="0.1 0.1 0.6" rgb2="0. 0. 0.2"
+                    width="800" height="800" markrgb="1 1 1" mark="random" random="0.0"/>
+                <material name="MatPlane2" reflectance="0.3" shininess=".1" specular=".1"
+                    texrepeat="2 2" texture="my_texture"/>
             </asset>
             ''')
         xml_path = os.path.dirname(os.path.join(BASE_DIR, self.robot_base))
@@ -166,7 +174,7 @@ class World:
         # Make sure floor renders the same for every world
         for g in worldbody['geom']:
             if g['@name'] == 'floor':
-                g.update({'@size': convert(self.floor_size), '@rgba': '1 1 1 1', '@material': 'MatPlane'})
+                g.update({'@size': convert(self.floor_size), '@rgba': '1 1 1 1', '@material': 'MatPlane2'})
 
         # Add cameras to the XML dictionary
         cameras = xmltodict.parse('''<b>

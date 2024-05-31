@@ -3,14 +3,14 @@
   <size njmax="3000" nconmax="1000"/>
   <default>
     <joint armature="1" damping="20" limited="true"/>
-    <geom condim="6" density="500" friction=".7 .1 .1" rgba="1 0 0  1"/>
+    <geom condim="6" density="500" friction=".7 .1 .1" rgba="1 0.6 0  1"/>
     <site size="0.05" type="sphere" rgba="0 0 1 0"/>
   </default>
   <option timestep="0.005"/>
   <worldbody>
     <geom name="floor" size="5 5 0.1" type="plane" condim="6"/>
     <body name="robot" pos="0 0 0.43">
-      <site name="robot" rgba="1 0 0 .1"/>
+      <site name="robot" rgba="1 0 0 .0"/>
       <camera name="vision" pos=".125 0 .2" xyaxes="0 -1 0 .4 0 1" fovy="100"/>
       <!-- <joint armature="0" damping="0" limited="false" margin="0.01" name="root" pos="0 0 0" type="free"/> -->
       <joint armature="0" axis="1 0 0" damping="5" limited="false" name="rootx" pos="0 0 0" stiffness="0" type="slide"/>

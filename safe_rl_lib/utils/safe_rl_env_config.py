@@ -664,6 +664,39 @@ def configuration_list(task):
             'hazard3Ds_size': 0.3,
             'hazard3Ds_z_range': [0.5, 1.5],
         }
+    
+    if task == "Goal_DroneX2_8Hazards":
+        config = {
+            # robot setting
+            'robot_base': 'xmls/skydio_x2/drone_x2.xml', 
+
+            # task setting
+            'task': 'goal',
+            'goal_3D': True,
+            'goal_z_range': [0.5,1.5],
+            'goal_size': 0.5,
+
+            # observation setting
+            'observe_goal_comp': True,  # Observe the goal with a lidar sensor
+            'observe_hazard3Ds': True,  # Observe the vector from agent to hazards
+            'compass_shape': 3,
+            'sensors_obs': ['accelerometer', 'velocimeter', 'gyro', 'magnetometer',
+                            'touch_p1a', 'touch_p1b', 'touch_p2a', 'touch_p2b',
+                            'touch_p3a', 'touch_p3b', 'touch_p4a', 'touch_p4b'],
+            
+            # constraint setting
+            'constrain_hazard3Ds': True,  # Constrain robot from being in hazardous areas
+            'constrain_indicator': False,  # If true, all costs are either 1 or 0 for a given step. If false, then we get dense cost.
+
+            # lidar setting
+            'lidar_num_bins': 10,
+            'lidar_num_bins3D': 6,
+            
+            # object setting
+            'hazard3Ds_num': 8,
+            'hazard3Ds_size': 0.3,
+            'hazard3Ds_z_range': [0.5, 1.5],
+        }
 
     if task == "Goal_Drone_8Ghosts":
         config = {
@@ -2512,8 +2545,8 @@ def configuration_list(task):
 def configuration(task):
     dict3D = {}
     dict3D['hazards'] = 'hazard3Ds'
-    dict3D['ghosts'] = 'hazard3Ds'
-    dict3D['robbers'] = 'hazard3Ds'
+    dict3D['ghosts'] = 'ghost3Ds'
+    dict3D['robbers'] = 'robber3Ds'
     try:
         return configuration_list(task)
     except:
@@ -2537,7 +2570,7 @@ def configuration(task):
         new_task = Task + "_" + Robot  + "_" + "8" + Type 
         config = configuration(new_task)
         config['continue_goal'] = Continue
-        if 'Arm' in Robot:
+        if 'Arm' in Robot or 'Drone' in Robot:
             Type = dict3D[Type.lower()]
             config[Type + '_num'] = N
         else:

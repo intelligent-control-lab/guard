@@ -62,34 +62,34 @@ def run_random(env_name):
     #     }
     config = {
             # robot setting
-            'robot_base': 'xmls/drone.xml', 
+            'robot_base': 'xmls/ant.xml',  
 
             # task setting
-            'task': 'goal',
-            'goal_3D': True,
-            'goal_z_range': [0.5,1.5],
+            'task': 'chase',
             'goal_size': 0.5,
 
             # observation setting
-            'observe_goal_comp': True,  # Observe the goal with a lidar sensor
-            'observe_hazard3Ds': True,  # Observe the vector from agent to hazards
-            'compass_shape': 3,
+            'observe_robbers': False,  # Observe the goal with a lidar sensor
+            'observe_ghosts': True,  # Observe the vector from agent to hazards
             'sensors_obs': ['accelerometer', 'velocimeter', 'gyro', 'magnetometer',
-                            'touch_p1a', 'touch_p1b', 'touch_p2a', 'touch_p2b',
-                            'touch_p3a', 'touch_p3b', 'touch_p4a', 'touch_p4b'],
+                            'touch_ankle_1a', 'touch_ankle_2a', 'touch_ankle_3a', 'touch_ankle_4a',
+                            'touch_ankle_1b', 'touch_ankle_2b', 'touch_ankle_3b', 'touch_ankle_4b'],
+
             
             # constraint setting
-            'constrain_hazard3Ds': True,  # Constrain robot from being in hazardous areas
+            'constrain_ghosts': True,  # Constrain robot from being in hazardous areas
             'constrain_indicator': False,  # If true, all costs are either 1 or 0 for a given step. If false, then we get dense cost.
 
             # lidar setting
-            'lidar_num_bins': 10,
-            'lidar_num_bins3D': 6,
+            'lidar_num_bins': 16,
             
             # object setting
-            'hazard3Ds_num': 8,
-            'hazard3Ds_size': 0.3,
-            'hazard3Ds_z_range': [0.5, 1.5],
+            'ghosts_num': 8,
+            'ghosts_size': 0.3,
+            'ghosts_travel':2.5,
+            'ghosts_safe_dist': 1.5,
+            'robbers_num': 0,
+            'robbers_size': 0.3,
         }
     env = Engine(config)
     obs = env.reset()
@@ -204,9 +204,12 @@ def run_random(env_name):
             # import ipdb;ipdb.set_trace()
             o = env.reset()
             # import ipdb;ipdb.set_trace()
-        if cnt > 10000:
+        if cnt > 800:
+            import ipdb;ipdb.set_trace()
             break
+        
         env.render()
+        
     print("##", time.time() - t)
 
 if __name__ == '__main__':

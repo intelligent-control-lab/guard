@@ -3,7 +3,7 @@
   <size njmax="3000" nconmax="1000"/>
   <default>
     <joint limited="true" stiffness="0.01"/>
-    <geom condim="6" size="0.032" rgba="1 0 0 1" type="capsule" density="5"/>
+    <geom condim="6" size="0.032" rgba="1 0.6 0 1" type="capsule" density="5"/>
     <motor ctrllimited="true" ctrlrange="-1.0 1.0" gear=".0125"/>
     <site size="0.036" type="sphere" rgba="1 0 0 0"/>
   </default>

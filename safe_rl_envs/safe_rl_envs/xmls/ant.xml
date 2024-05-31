@@ -3,7 +3,7 @@
   <size njmax="3000" nconmax="1000"/>
   <default>
     <joint armature="1" damping="1" limited="true"/>
-    <geom condim="6" density="5.0" friction="0.75 0.01 0.01"  margin="0.01" rgba="1 0 0 1"/>
+    <geom condim="6" density="5.0" friction="0.75 0.01 0.01"  margin="0.01" rgba="1 0.6 0 1"/>
     <motor  ctrllimited="true" ctrlrange="-1.0 1.0" gear="30"/>
     <site size="0.2" type="sphere" rgba="0 0 1 0"/>
   </default>
