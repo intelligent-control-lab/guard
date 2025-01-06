@@ -2,94 +2,119 @@
 
 import argparse
 import gym
-import safe_rl_envs  # noqa
 import numpy as np  # noqa
 from safe_rl_envs.envs.engine import Engine
 from getkey import getkey, keys
 def run_random(env_name):
     # env = gym.make(env_name)
 
+    config = {
+            # robot setting
+            'robot_base': 'xmls/fanuc_lr_mate/lrmate_arm_3.xml', 
+            # 'robot_base': 'xmls/arm_3.xml', 
+            'robot_locations':[(0.0,0.0)],
+            'robot_keepout': 0.2, 
+            'arm_range': 0.8,
+
+            # task setting
+            'task': 'goal',
+            'goal_3D': True,
+            'goal_z_range': [0.1,0.6],
+            'goal_size': 0.2,
+            'goal_keepout': 0.2,
+            # 'goal_placements': [(-1.5, -1.5, 1.5, 1.5)],
+            'reward_distance': 10.0,
+            'reward_goal': 10.0,
+            
+            # observation setting
+            'observe_goal_comp': True,  # Observe the goal with a lidar sensor
+            'observe_hazard3Ds': False,  # Observe the vector from agent to hazards
+            'compass_shape': 3,
+            'sensors_obs':[],
+            # 'sensors_obs': ['accelerometer_link_1', 'velocimeter_link_1', 'gyro_link_1', 'magnetometer_link_1',
+            #                 'accelerometer_link_2', 'velocimeter_link_2', 'gyro_link_2', 'magnetometer_link_2',
+            #                 'accelerometer_link_3', 'velocimeter_link_3', 'gyro_link_3', 'magnetometer_link_3',
+            #                 'accelerometer_link_4', 'velocimeter_link_4', 'gyro_link_4', 'magnetometer_link_4',
+            #                 'accelerometer_link_5', 'velocimeter_link_5', 'gyro_link_5', 'magnetometer_link_5',
+            #                 'touch_end_effector'],
+            
+            # constraint setting
+            'constrain_hazard3Ds': False,  # Constrain robot from being in hazardous areas
+            'constrain_indicator': False,  # If true, all costs are either 1 or 0 for a given step. If false, then we get dense cost.
+            
+            # lidar setting
+            'lidar_num_bins': 10,
+            'lidar_num_bins3D': 6,
+            # 'lidar_body': ['link_2', 'link_5', 'link_7'],
+            'lidar_body': ['link_1', 'link_3', 'link_5'],
+            
+            # object setting
+            'hazard3Ds_num': 0,
+            'hazard3Ds_size': 0.2,
+            'hazard3Ds_z_range': [0.1,0.1],
+            
+            # render setting
+            'render_lidar_radius': 0.08,
+            'render_lidar_size': 0.015,
+            'render_compass_radius': 0.15, 
+            'render_compass_size': 0.03,  
+        }
+
+    
     # config = {
     #         # robot setting
-    #         'robot_base': 'xmls/fanuc_lr_mate/arm_lrmate_3.xml', 
-    #         # 'robot_base': 'xmls/arm_3.xml', 
-    #         'robot_locations':[(0.0,0.0)],
-    #         'robot_keepout': 0.2, 
-    #         'arm_range': 0.8,
+    #         'robot_base': 'xmls/ant.xml',  
 
     #         # task setting
-    #         'task': 'goal',
-    #         'goal_3D': True,
-    #         'goal_z_range': [0.1,0.6],
-    #         'goal_size': 0.2,
-    #         'goal_keepout': 0.2,
-    #         # 'goal_placements': [(-1.5, -1.5, 1.5, 1.5)],
-    #         'reward_distance': 10.0,
-    #         'reward_goal': 10.0,
-            
+    #         'task': 'chase',
+    #         'goal_size': 0.5,
+
     #         # observation setting
-    #         'observe_goal_comp': True,  # Observe the goal with a lidar sensor
-    #         'observe_hazard3Ds': False,  # Observe the vector from agent to hazards
-    #         'compass_shape': 3,
-    #         'sensors_obs':[],
-    #         # 'sensors_obs': ['accelerometer_link_1', 'velocimeter_link_1', 'gyro_link_1', 'magnetometer_link_1',
-    #         #                 'accelerometer_link_2', 'velocimeter_link_2', 'gyro_link_2', 'magnetometer_link_2',
-    #         #                 'accelerometer_link_3', 'velocimeter_link_3', 'gyro_link_3', 'magnetometer_link_3',
-    #         #                 'accelerometer_link_4', 'velocimeter_link_4', 'gyro_link_4', 'magnetometer_link_4',
-    #         #                 'accelerometer_link_5', 'velocimeter_link_5', 'gyro_link_5', 'magnetometer_link_5',
-    #         #                 'touch_end_effector'],
+    #         'observe_robbers': False,  # Observe the goal with a lidar sensor
+    #         'observe_ghosts': True,  # Observe the vector from agent to hazards
+    #         'sensors_obs': ['accelerometer', 'velocimeter', 'gyro', 'magnetometer',
+    #                         'touch_ankle_1a', 'touch_ankle_2a', 'touch_ankle_3a', 'touch_ankle_4a',
+    #                         'touch_ankle_1b', 'touch_ankle_2b', 'touch_ankle_3b', 'touch_ankle_4b'],
+
             
     #         # constraint setting
-    #         'constrain_hazard3Ds': False,  # Constrain robot from being in hazardous areas
+    #         'constrain_ghosts': True,  # Constrain robot from being in hazardous areas
     #         'constrain_indicator': False,  # If true, all costs are either 1 or 0 for a given step. If false, then we get dense cost.
-            
+
     #         # lidar setting
-    #         'lidar_num_bins': 10,
-    #         'lidar_num_bins3D': 6,
-    #         'lidar_body': ['link_2', 'link_5', 'link_7'],
-    #         # 'lidar_body': ['link_1', 'link_3', 'link_5'],
+    #         'lidar_num_bins': 16,
             
     #         # object setting
-    #         'hazard3Ds_num': 0,
-    #         'hazard3Ds_size': 0.2,
-    #         'hazard3Ds_z_range': [0.1,0.1],
-            
-    #         # render setting
-    #         'render_lidar_radius': 0.08,
-    #         'render_lidar_size': 0.015,
-    #         'render_compass_radius': 0.15, 
-    #         'render_compass_size': 0.03,  
+    #         'ghosts_num': 3,
+    #         'ghosts_size': 0.3,
+    #         'ghosts_travel':2.5,
+    #         'ghosts_safe_dist': 1.5,
+    #         'robbers_num': 1,
+    #         'robbers_size': 0.3,
     #     }
     config = {
             # robot setting
-            'robot_base': 'xmls/ant.xml',  
+            'robot_base': 'xmls/point.xml',  
 
             # task setting
-            'task': 'chase',
+            'task': 'goal',
             'goal_size': 0.5,
 
             # observation setting
-            'observe_robbers': False,  # Observe the goal with a lidar sensor
-            'observe_ghosts': True,  # Observe the vector from agent to hazards
-            'sensors_obs': ['accelerometer', 'velocimeter', 'gyro', 'magnetometer',
-                            'touch_ankle_1a', 'touch_ankle_2a', 'touch_ankle_3a', 'touch_ankle_4a',
-                            'touch_ankle_1b', 'touch_ankle_2b', 'touch_ankle_3b', 'touch_ankle_4b'],
-
+            'observe_goal_comp': True,  # Observe the goal with a lidar sensor
+            'observe_hazards': True,  # Observe the vector from agent to hazards
             
             # constraint setting
-            'constrain_ghosts': True,  # Constrain robot from being in hazardous areas
+            'constrain_hazards': True,  # Constrain robot from being in hazardous areas
             'constrain_indicator': False,  # If true, all costs are either 1 or 0 for a given step. If false, then we get dense cost.
 
             # lidar setting
             'lidar_num_bins': 16,
             
             # object setting
-            'ghosts_num': 8,
-            'ghosts_size': 0.3,
-            'ghosts_travel':2.5,
-            'ghosts_safe_dist': 1.5,
-            'robbers_num': 0,
-            'robbers_size': 0.3,
+            'hazards_num': 8,
+            'hazards_size': 0.3,
+            
         }
     env = Engine(config)
     obs = env.reset()
@@ -113,8 +138,9 @@ def run_random(env_name):
         #     obs = env.reset()
         # assert env.observation_space.contains(obs)
         act = env.action_space.sample()
-        # act = np.zeros(act.shape)
-        # act[0] = 100*cnt
+        act = np.zeros(act.shape)
+        act[0] = 0.01
+        act[1] = 1
         # print(act)
         
         cnt = cnt + 1

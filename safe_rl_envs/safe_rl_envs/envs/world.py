@@ -299,7 +299,7 @@ class World:
         self.xml_string = xmltodict.unparse(self.xml)
         self.model = mujoco.MjModel.from_xml_string(self.xml_string)
         self.data = mujoco.MjData(self.model)
-
+        mujoco.mj_saveLastXML("output_model.xml", self.model)
         # Recompute simulation intrinsics from new position
         mujoco.mj_forward(self.model, self.data)
 

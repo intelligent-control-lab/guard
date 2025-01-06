@@ -9,7 +9,8 @@ from collections import OrderedDict
 import mujoco
 import mujoco.viewer
 from safe_rl_envs.envs.world import World, Robot
-
+from safe_rl_envs import G1Controller
+import time
 from .engine_utils import *
 
 
@@ -100,7 +101,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
     by the config dict of the Engine() object.
 
     '''
-
+    
     # Default configuration (this should not be nested since it gets copied)
     DEFAULT = {
         'num_steps': 1000,  # Maximum number of environment steps in an episode
@@ -404,6 +405,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
             self.arm_link_n = 7
         if 'arm_3' in self.robot_base:
             self.arm_link_n = 5
+        if 'g1' in self.robot_base:
+            self.g1_controller = G1Controller()
 
         self.action_space = gym.spaces.Box(-1, 1, (self.robot.nu,), dtype=np.float32)
         self.build_observation_space()
@@ -549,6 +552,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
     #----------------------------------------------------------------
 
     def step(self, action):
+        step_start = time.time()
         ''' Take a step and return observation, reward, done, and info '''
         action = np.array(action, copy=False)  # Cast to ndarray
         assert not self.done, 'Environment must be reset before stepping'
@@ -577,6 +581,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 force = R@force
                 force = [force[i,0] for i in range(3)]
                 self.data.xfrc_applied[self.data.body(propeller).id,:] = force + torque
+        elif "g1" in self.robot_base:
+            self.data.ctrl[:] = self.g1_controller.step(self.data, action)
         else:
             action_range = self.model.actuator_ctrlrange
             # action_scale = action_range[:,1] - action_range[:, 0]
@@ -636,7 +642,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
         self.steps += 1
         if self.steps >= self.num_steps:
             self.done = True  # Maximum number of steps in an episode reached
-
         return self.obs(), reward, self.done, info
 
     def reset(self):
@@ -691,7 +696,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
             self.renderer =  mujoco.Renderer(model, width = width, height = height)
             self.renderer_cam, self.renderer_opt = self.renderer_setup()
             self._old_render_mode = mode
-        mujoco.mj_step(model, data)
+        # mujoco.mj_step(model, data)
         if self.viewer:
             self.viewer.user_scn.ngeom = 0
         self.renderer._scene.ngeom = 0
