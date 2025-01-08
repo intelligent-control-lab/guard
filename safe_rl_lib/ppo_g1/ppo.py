@@ -9,7 +9,7 @@ import ppo_core as core
 from utils.logx import EpochLogger, setup_logger_kwargs
 from utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
-from safe_rl_envs.envs.engine import Engine as  safe_rl_envs_Engine
+from safe_rl_envs.envs.engine import Engine as safe_rl_envs_Engine
 from utils.safe_rl_env_config import configuration
 import os.path as osp
 
@@ -99,8 +99,7 @@ class PPOBuffer:
 def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
         vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=5000,
-        target_kl=0.01, logger_kwargs=dict(), save_freq=10, model_save=False,
-        atari=None):
+        target_kl=0.01, logger_kwargs=dict(), save_freq=10, model_save=False):
     """
     Proximal Policy Optimization (by clipping), 
 
@@ -201,12 +200,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
         save_freq (int): How often (in terms of gap between epochs) to save
             the current policy and value function.
-        
-        atari (str): name of atari game (None if running continuous game).
     """
-    def atari_env_fn(atari_name, version='5'):
-        env_name = 'ALE/' + atari_name + '-v' + version
-        return gymnasium.make(env_name, obs_type="ram")
 
     # Special function to avoid certain slowdowns from PyTorch + MPI combo.
     setup_pytorch_for_mpi()
@@ -221,10 +215,34 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     np.random.seed(seed)
 
     # Instantiate environment
-    if atari == None:
-        env = env_fn()
-    else:
-        env = atari_env_fn(atari)
+    env = env_fn()
+
+    # config = {
+    #     # robot setting
+    #     'robot_base': 'xmls/g1_29dof_lock_upper_body.xml',  
+
+    #     # task setting
+    #     'task': 'goal',
+    #     'goal_size': 0.5,
+
+    #     # observation setting
+    #     'observe_goal_comp': True,  # Observe the goal with a lidar sensor
+    #     'observe_hazards': True,  # Observe the vector from agent to hazards
+        
+    #     # constraint setting
+    #     'constrain_hazards': True,  # Constrain robot from being in hazardous areas
+    #     'constrain_indicator': False,  # If true, all costs are either 1 or 0 for a given step. If false, then we get dense cost.
+
+    #     # lidar setting
+    #     'lidar_num_bins': 16,
+        
+    #     # object setting
+    #     'hazards_num': 8,
+    #     'hazards_size': 0.3,
+    #     'frameskip_binom_n': 1.0,
+    # }
+    # env = Engine(config)
+
     obs_dim = env.observation_space.shape
     act_dim = env.g1_controller.cmd.shape
 
@@ -312,44 +330,37 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     # Prepare for interaction with environment
     start_time = time.time()
-    if atari == None:
-        o, ep_ret, ep_len = env.reset(), 0, 0
-    else:
-        o, ep_ret, ep_len = env.reset(seed=seed), 0, 0
+    o, ep_ret, ep_len = env.reset(), 0, 0
+
+    # last_a = None
 
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
         for t in range(local_steps_per_epoch):
             step_start = time.time()
             
-            if isinstance(o, tuple):
-                o = o[0]
-            # a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
+            # if t % 100 == 0:
             a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
-
-            # try:
-            if atari == None:
+            # last_a = a.copy()
+            # else:
+            #     a = last_a.copy()
+            
+            try:
                 next_o, r, d, info = env.step(a)
-            else:
-                next_o, r, d_1, d_2, info = env.step(a)
-                d = d_1 or d_2
-            # except:
-            #     print('the enviornment is wrong, skipping episode')
-            #     next_o, r, d = None, 0, True
+            except:
+                print('the enviornment is wrong, skipping episode')
+                next_o, r, d = None, 0, True
             ep_ret += r
             ep_len += 1
 
             # save and log
-            if isinstance(o, tuple):
-                o = o[0]
             buf.store(o, a, r, v, logp)
             logger.store(VVals=v)
             
             # Update obs (critical!)
             o = next_o
 
-            atari_mode = atari != None
-            timeout = (ep_len == max_ep_len) and (not atari_mode)
+            timeout = (ep_len == max_ep_len)
             terminal = d or timeout
             epoch_ended = t==local_steps_per_epoch-1
 
@@ -358,8 +369,6 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                     print('Warning: trajectory cut off by epoch at %d steps.'%ep_len, flush=True)
                 # if trajectory didn't reach terminal state, bootstrap value target
                 if timeout or epoch_ended:
-                    if isinstance(o, tuple):
-                        o = o[0]
                     _, v, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
                 else:
                     v = 0
@@ -367,14 +376,14 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 if terminal:
                     # only save EpRet / EpLen if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
-                if atari == None:
-                    o, ep_ret, ep_len = env.reset(), 0, 0
-                else:
-                    o, ep_ret, ep_len = env.reset(seed=seed), 0, 0
+                o, ep_ret, ep_len = env.reset(), 0, 0
+            
 
             time_until_next_step = env.model.opt.timestep - (time.time() - step_start)
             if time_until_next_step > 0:
                 time.sleep(time_until_next_step)
+
+            env.render()
     
         # Save model
         if ((epoch % save_freq == 0) or (epoch == epochs-1)) and model_save:
@@ -420,29 +429,13 @@ if __name__ == '__main__':
     parser.add_argument('--save_freq', type=int, default=10)
     parser.add_argument('--exp_name', type=str, default='ppo')
     parser.add_argument('--model_save', action='store_true')
-    parser.add_argument('--atari_name', '-a', type=str, default=None, 
-                        choices=['Adventure', 'Pong', 'Seaquest', 'Riverraid', 'Freeway', 'BeamRider', 'Gopher', 'SpaceInvaders',
-                                 'AirRaid', 'Assault', 'Qbert', 'Skiing', 'Enduro', 'Breakout', 'Bowling', 'IceHockey', 'KungFuMaster',
-                                 'TimePilot', 'Boxing', 'JourneyEscape', 'CrazyClimber', 'Frostbite',
-                                 'Asteroids', 'Solaris', 'Zaxxon', 'BattleZone', 'Centipede', 'DemonAttack',
-                                 'StarGunner', 'VideoPinball', 'Venture', 'UpNDown', 'Robotank',
-                                 'Atlantis', 'Carnival', 'Defender', 'ElevatorAction', 'Hero',
-                                 'Pitfall', 'Amidar', 'FishingDerby', 'MsPacman',
-                                 'Alien', 'Asterix', 'BankHeist', 'Berzerk', 'ChopperCommand',
-                                 'DoubleDunk', 'Gravitar', 'Jamesbond', 'Kangaroo', 'NameThisGame',
-                                 'Krull', 'MontezumaRevenge', 'Phoenix', 'Pooyan', 'PrivateEye', 'RoadRunner',
-                                 'Tennis', 'Tutankham', 'WizardOfWor', 'YarsRevenge'])
     args = parser.parse_args()
 
     args.model_save = True
 
     mpi_fork(args.cpu)  # run parallel code with mpi
     
-    if args.atari_name == None:
-        exp_name = args.task + '_' + args.exp_name + '_' + 'kl' + str(args.target_kl) + '_' + 'epochs' + str(args.epochs)
-    else:
-        import gymnasium
-        exp_name = args.atari_name + '_' + args.exp_name + '_' + 'kl' + str(args.target_kl) + '_' + 'epochs' + str(args.epochs)
+    exp_name = args.task + '_' + args.exp_name + '_' + 'kl' + str(args.target_kl) + '_' + 'epochs' + str(args.epochs)
     logger_kwargs = setup_logger_kwargs(exp_name, args.seed)
     
     # whether to save model
@@ -451,5 +444,4 @@ if __name__ == '__main__':
     ppo(lambda : create_env(args), actor_critic=core.MLPActorCritic, save_freq=args.save_freq,
         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma, 
         seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
-        logger_kwargs=logger_kwargs, target_kl=args.target_kl, model_save=model_save,
-        atari=args.atari_name)
+        logger_kwargs=logger_kwargs, target_kl=args.target_kl, model_save=model_save)
