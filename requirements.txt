@@ -2,4 +2,4 @@ gym
 torch
 mujoco
 mediapy
-mpi4py
+mpi4py==3.1.3
