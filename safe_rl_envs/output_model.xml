@@ -1,5 +1,5 @@
 <mujoco model="g1_29dof_lock_upper_body">
-  <compiler angle="radian" meshdir="xmls/g1/meshes/"/>
+  <compiler angle="radian" meshdir="g1/meshes/"/>
 
   <statistic meansize="0.144785" extent="1.23314" center="0.025392 2.0634e-05 -0.245975"/>
 
@@ -10,45 +10,45 @@
   <asset>
     <texture type="2d" name="texplane" builtin="checker" rgb1="0.7 0.7 0.7" rgb2="0.8 0.8 0.8" width="100" height="100"/>
     <texture type="2d" name="texplane2" builtin="checker" rgb2="0.6 0.6 0.6" width="100" height="100"/>
-    <texture type="2d" name="my_texture" file="xmls/image.png"/>
+    <texture type="2d" name="my_texture" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/image.png"/>
     <texture type="skybox" builtin="gradient" mark="random" rgb1="0.1 0.1 0.6" rgb2="0 0 0.2" markrgb="1 1 1" random="0" width="800" height="4800"/>
     <material name="MatPlane" texture="texplane" texrepeat="10 10" specular="0.1" shininess="0.1" reflectance="0.1"/>
     <material name="MatPlane2" texture="my_texture" texrepeat="2 2" specular="0.1" shininess="0.1" reflectance="0.3"/>
-    <mesh name="pelvis" file="pelvis.STL"/>
-    <mesh name="pelvis_contour_link" file="pelvis_contour_link.STL"/>
-    <mesh name="left_hip_pitch_link" file="left_hip_pitch_link.STL"/>
-    <mesh name="left_hip_roll_link" file="left_hip_roll_link.STL"/>
-    <mesh name="left_hip_yaw_link" file="left_hip_yaw_link.STL"/>
-    <mesh name="left_knee_link" file="left_knee_link.STL"/>
-    <mesh name="left_ankle_pitch_link" file="left_ankle_pitch_link.STL"/>
-    <mesh name="left_ankle_roll_link" file="left_ankle_roll_link.STL"/>
-    <mesh name="right_hip_pitch_link" file="right_hip_pitch_link.STL"/>
-    <mesh name="right_hip_roll_link" file="right_hip_roll_link.STL"/>
-    <mesh name="right_hip_yaw_link" file="right_hip_yaw_link.STL"/>
-    <mesh name="right_knee_link" file="right_knee_link.STL"/>
-    <mesh name="right_ankle_pitch_link" file="right_ankle_pitch_link.STL"/>
-    <mesh name="right_ankle_roll_link" file="right_ankle_roll_link.STL"/>
-    <mesh name="waist_yaw_link" file="waist_yaw_link_rev_1_0.STL"/>
-    <mesh name="waist_roll_link" file="waist_roll_link_rev_1_0.STL"/>
-    <mesh name="torso_link" file="torso_link_rev_1_0.STL"/>
-    <mesh name="logo_link" file="logo_link.STL"/>
-    <mesh name="head_link" file="head_link.STL"/>
-    <mesh name="left_shoulder_pitch_link" file="left_shoulder_pitch_link.STL"/>
-    <mesh name="left_shoulder_roll_link" file="left_shoulder_roll_link.STL"/>
-    <mesh name="left_shoulder_yaw_link" file="left_shoulder_yaw_link.STL"/>
-    <mesh name="left_elbow_link" file="left_elbow_link.STL"/>
-    <mesh name="left_wrist_roll_link" file="left_wrist_roll_link.STL"/>
-    <mesh name="left_wrist_pitch_link" file="left_wrist_pitch_link.STL"/>
-    <mesh name="left_wrist_yaw_link" file="left_wrist_yaw_link.STL"/>
-    <mesh name="left_rubber_hand" file="left_rubber_hand.STL"/>
-    <mesh name="right_shoulder_pitch_link" file="right_shoulder_pitch_link.STL"/>
-    <mesh name="right_shoulder_roll_link" file="right_shoulder_roll_link.STL"/>
-    <mesh name="right_shoulder_yaw_link" file="right_shoulder_yaw_link.STL"/>
-    <mesh name="right_elbow_link" file="right_elbow_link.STL"/>
-    <mesh name="right_wrist_roll_link" file="right_wrist_roll_link.STL"/>
-    <mesh name="right_wrist_pitch_link" file="right_wrist_pitch_link.STL"/>
-    <mesh name="right_wrist_yaw_link" file="right_wrist_yaw_link.STL"/>
-    <mesh name="right_rubber_hand" file="right_rubber_hand.STL"/>
+    <mesh name="pelvis" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/pelvis.STL"/>
+    <mesh name="pelvis_contour_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/pelvis_contour_link.STL"/>
+    <mesh name="left_hip_pitch_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/left_hip_pitch_link.STL"/>
+    <mesh name="left_hip_roll_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/left_hip_roll_link.STL"/>
+    <mesh name="left_hip_yaw_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/left_hip_yaw_link.STL"/>
+    <mesh name="left_knee_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/left_knee_link.STL"/>
+    <mesh name="left_ankle_pitch_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/left_ankle_pitch_link.STL"/>
+    <mesh name="left_ankle_roll_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/left_ankle_roll_link.STL"/>
+    <mesh name="right_hip_pitch_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/right_hip_pitch_link.STL"/>
+    <mesh name="right_hip_roll_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/right_hip_roll_link.STL"/>
+    <mesh name="right_hip_yaw_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/right_hip_yaw_link.STL"/>
+    <mesh name="right_knee_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/right_knee_link.STL"/>
+    <mesh name="right_ankle_pitch_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/right_ankle_pitch_link.STL"/>
+    <mesh name="right_ankle_roll_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/right_ankle_roll_link.STL"/>
+    <mesh name="waist_yaw_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/waist_yaw_link_rev_1_0.STL"/>
+    <mesh name="waist_roll_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/waist_roll_link_rev_1_0.STL"/>
+    <mesh name="torso_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/torso_link_rev_1_0.STL"/>
+    <mesh name="logo_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/logo_link.STL"/>
+    <mesh name="head_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/head_link.STL"/>
+    <mesh name="left_shoulder_pitch_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/left_shoulder_pitch_link.STL"/>
+    <mesh name="left_shoulder_roll_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/left_shoulder_roll_link.STL"/>
+    <mesh name="left_shoulder_yaw_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/left_shoulder_yaw_link.STL"/>
+    <mesh name="left_elbow_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/left_elbow_link.STL"/>
+    <mesh name="left_wrist_roll_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/left_wrist_roll_link.STL"/>
+    <mesh name="left_wrist_pitch_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/left_wrist_pitch_link.STL"/>
+    <mesh name="left_wrist_yaw_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/left_wrist_yaw_link.STL"/>
+    <mesh name="left_rubber_hand" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/left_rubber_hand.STL"/>
+    <mesh name="right_shoulder_pitch_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/right_shoulder_pitch_link.STL"/>
+    <mesh name="right_shoulder_roll_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/right_shoulder_roll_link.STL"/>
+    <mesh name="right_shoulder_yaw_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/right_shoulder_yaw_link.STL"/>
+    <mesh name="right_elbow_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/right_elbow_link.STL"/>
+    <mesh name="right_wrist_roll_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/right_wrist_roll_link.STL"/>
+    <mesh name="right_wrist_pitch_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/right_wrist_pitch_link.STL"/>
+    <mesh name="right_wrist_yaw_link" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/right_wrist_yaw_link.STL"/>
+    <mesh name="right_rubber_hand" file="/home/guardx/feihan_dev/workspace/guard/safe_rl_envs/safe_rl_envs/xmls/g1/meshes/right_rubber_hand.STL"/>
   </asset>
 
   <worldbody>
@@ -56,7 +56,7 @@
     <camera name="fixednear" pos="0 -2 2" quat="0.92388 0.382683 0 0"/>
     <camera name="fixedfar" pos="0 -5 5" quat="0.92388 0.382683 0 0"/>
     <light pos="0 0 0.5" dir="0 0 -1" directional="true" castshadow="false" cutoff="100" exponent="1" diffuse="1 1 1" specular="0 0 0"/>
-    <body name="robot" pos="0.396594 -0.0987345 0.793" quat="-0.976585 0 0 0.215134">
+    <body name="robot" pos="0.0359522 1.31251 0.793" quat="-0.183398 0 0 0.983039">
       <inertial pos="0 0 -0.07605" quat="1 0 -0.000399148 0" mass="3.813" diaginertia="0.010549 0.0093089 0.0079184"/>
       <joint name="floating_base_joint" type="free" limited="false" actuatorfrclimited="false"/>
       <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.2 0.2 0.2 1" mesh="pelvis"/>
@@ -65,7 +65,7 @@
       <site name="robot" pos="0 0 0" rgba="1 0 0 0.1"/>
       <site name="imu_in_pelvis" pos="0.04525 0 -0.08339" size="0.01"/>
       <camera name="vision" pos="0 0 0.15" quat="0.585532 0.396424 -0.396424 -0.585532" fovy="90"/>
-      <camera name="track" pos="0.840385 -1.81487 2" quat="0.902247 0.373723 0.0823281 0.198758" mode="track"/>
+      <camera name="track" pos="0.721148 1.86546 2" quat="0.169437 0.0701832 0.376193 0.908209" mode="track"/>
       <body name="left_hip_pitch_link" pos="0 0.064452 -0.1027">
         <inertial pos="0.002741 0.047791 -0.02606" quat="0.954862 0.293964 0.0302556 0.030122" mass="1.35" diaginertia="0.00181517 0.00153422 0.00116212"/>
         <joint name="left_hip_pitch_joint" pos="0 0 0" axis="0 1 0" range="-2.5307 2.8798" actuatorfrcrange="-88 88"/>
@@ -235,31 +235,31 @@
         </body>
       </body>
     </body>
-    <body name="goal" pos="1.35959 -0.5142 0.26" quat="0.53044 0 0 0.847723">
+    <body name="goal" pos="0.693295 -0.863012 0.26" quat="0.989186 0 0 0.146668">
       <geom name="goal" size="0.5 0.25" type="cylinder" contype="0" conaffinity="0" rgba="0 1 0 0.25"/>
     </body>
-    <body name="hazard0" pos="-0.764367 0.609392 0.02" quat="-0.963922 0 0 0.266186">
+    <body name="hazard0" pos="0.892768 1.2931 0.02" quat="-0.823761 0 0 0.566938">
       <geom name="hazard0" size="0.3 0.01" type="cylinder" contype="0" conaffinity="0" group="3" rgba="0 0 1 0.25"/>
     </body>
-    <body name="hazard1" pos="-1.2153 1.5057 0.02" quat="0.906748 0 0 0.421673">
+    <body name="hazard1" pos="-0.925391 1.5942 0.02" quat="0.920439 0 0 0.390886">
       <geom name="hazard1" size="0.3 0.01" type="cylinder" contype="0" conaffinity="0" group="3" rgba="0 0 1 0.25"/>
     </body>
-    <body name="hazard2" pos="0.470757 -1.44501 0.02" quat="0.109965 0 0 0.993935">
+    <body name="hazard2" pos="-0.849282 -0.511158 0.02" quat="-0.436113 0 0 0.899892">
       <geom name="hazard2" size="0.3 0.01" type="cylinder" contype="0" conaffinity="0" group="3" rgba="0 0 1 0.25"/>
     </body>
-    <body name="hazard3" pos="1.40153 0.497611 0.02" quat="-0.578197 0 0 0.815897">
+    <body name="hazard3" pos="0.711856 0.425523 0.02" quat="-0.83944 0 0 0.543452">
       <geom name="hazard3" size="0.3 0.01" type="cylinder" contype="0" conaffinity="0" group="3" rgba="0 0 1 0.25"/>
     </body>
-    <body name="hazard4" pos="-1.574 -1.05253 0.02" quat="0.417309 0 0 0.908764">
+    <body name="hazard4" pos="-0.228176 -1.24608 0.02" quat="0.185728 0 0 0.982601">
       <geom name="hazard4" size="0.3 0.01" type="cylinder" contype="0" conaffinity="0" group="3" rgba="0 0 1 0.25"/>
     </body>
-    <body name="hazard5" pos="-0.598313 -0.849206 0.02" quat="-0.604947 0 0 0.796266">
+    <body name="hazard5" pos="-0.654118 0.319485 0.02" quat="0.783634 0 0 0.621222">
       <geom name="hazard5" size="0.3 0.01" type="cylinder" contype="0" conaffinity="0" group="3" rgba="0 0 1 0.25"/>
     </body>
-    <body name="hazard6" pos="1.36122 1.59618 0.02" quat="0.59376 0 0 0.804642">
+    <body name="hazard6" pos="1.46871 -0.484584 0.02" quat="0.645663 0 0 0.763623">
       <geom name="hazard6" size="0.3 0.01" type="cylinder" contype="0" conaffinity="0" group="3" rgba="0 0 1 0.25"/>
     </body>
-    <body name="hazard7" pos="0.127167 1.55473 0.02" quat="-0.882034 0 0 0.471187">
+    <body name="hazard7" pos="-1.47932 0.314115 0.02" quat="0.407645 0 0 0.91314">
       <geom name="hazard7" size="0.3 0.01" type="cylinder" contype="0" conaffinity="0" group="3" rgba="0 0 1 0.25"/>
     </body>
   </worldbody>

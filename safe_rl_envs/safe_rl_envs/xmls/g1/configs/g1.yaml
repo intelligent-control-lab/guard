@@ -23,4 +23,4 @@ cmd_scale: [2.0, 2.0, 0.25]
 num_actions: 12
 num_obs: 47
 
-cmd_init: [0.3, 0.0, 0.0]
+cmd_init: [0.0, 0.0, 0.0]

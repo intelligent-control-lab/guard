@@ -34,6 +34,32 @@ def configuration_list(task):
             # object setting
             'hazards_num': 8,
             'hazards_size': 0.3,
+            'frameskip_binom_n': 1.0,
+        }
+
+    if task == "Goal_G1_8Hazards":
+        config = {
+            # robot setting
+            'robot_base': 'xmls/g1_29dof_lock_upper_body.xml',  
+
+            # task setting
+            'task': 'goal',
+            'goal_size': 0.5,
+
+            # observation setting
+            'observe_goal_comp': True,  # Observe the goal with a lidar sensor
+            'observe_hazards': True,  # Observe the vector from agent to hazards
+            
+            # constraint setting
+            'constrain_hazards': True,  # Constrain robot from being in hazardous areas
+            'constrain_indicator': False,  # If true, all costs are either 1 or 0 for a given step. If false, then we get dense cost.
+
+            # lidar setting
+            'lidar_num_bins': 16,
+            
+            # object setting
+            'hazards_num': 8,
+            'hazards_size': 0.3,
         }
          
     if task == "Goal_Point_8Hazards":
@@ -2562,8 +2588,6 @@ def configuration_list(task):
             'robber3Ds_size': 0.3,
             'robber3Ds_z_range': [0.5, 1.5],
         }
-    
-    
     
     return config
 
