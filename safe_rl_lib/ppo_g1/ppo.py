@@ -383,7 +383,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             if time_until_next_step > 0:
                 time.sleep(time_until_next_step)
 
-            env.render()
+            # env.render()
     
         # Save model
         if ((epoch % save_freq == 0) or (epoch == epochs-1)) and model_save:
