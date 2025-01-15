@@ -41,15 +41,18 @@ def replay(env_fn, model_path=None, video_name=None, max_epoch=1):
     ep_ret = 0
     time_step = 0
     epoch = 0
+
+    decimation = env.g1_controller.control_decimation
     
     video_array = []
     
     # load the model 
     ac = torch.load(model_path)
     
+    a = None
     # evaluate the model 
     while True:
-        time_step += 1
+        step_start = time.time()
         if d:
             epoch += 1
             print('Episode Return: %.3f'%(ep_ret))
@@ -59,23 +62,26 @@ def replay(env_fn, model_path=None, video_name=None, max_epoch=1):
             ep_ret = 0
             o = env.reset()
         
-        try:
-            a, v, vc, logp, _, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
-        except:
-            print('please choose the correct environment, the observation space doesn''t match')
-            raise NotImplementedError
+        print(epoch, time_step)
         
+        if time_step % decimation == 0:
+            a, v, vc, logp, _, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
 
         next_o, r, d, _ = env.step(a)
         
         # Update obs (critical!)
         o = next_o
 
-        img_array = env.render()
-        # img_array = env.render(mode='rgb_array')
+        # img_array = env.render()
+        img_array = env.render(mode='rgb_array')
         video_array.append(img_array)
-        print(time_step)
         ep_ret += r
+
+        time_until_next_step = env.model.opt.timestep - (time.time() - step_start)
+        if time_until_next_step > 0:
+            time.sleep(time_until_next_step)
+            
+        time_step += 1
 
     # save video 
     fps = 60

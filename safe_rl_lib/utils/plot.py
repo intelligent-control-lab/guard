@@ -20,6 +20,7 @@ def plot_data(data, xaxis='Epoch', value="AverageEpRet", condition="Condition1",
             smoothed_y[t] = average(y[t-k], y[t-k+1], ..., y[t+k-1], y[t+k])
         where the "smooth" param is width of that window (2k+1)
         """
+
         y = np.ones(smooth)
         for datum in data:
             x = np.asarray(datum[value])
@@ -29,8 +30,9 @@ def plot_data(data, xaxis='Epoch', value="AverageEpRet", condition="Condition1",
 
     if isinstance(data, list):
         data = pd.concat(data, ignore_index=True)
-    sns.set(style="darkgrid", font_scale=1.5)
-    sns.tsplot(data=data, time=xaxis, value=value, unit="Unit", condition=condition, ci='sd', **kwargs)
+
+    sns.set(style="darkgrid", font_scale=1.5, palette='colorblind')
+    ax = sns.lineplot(data=data, x=xaxis, y=value, hue=condition, lw=2, **kwargs)
     """
     If you upgrade to any version of Seaborn greater than 0.8.1, switch from 
     tsplot to lineplot replacing L29 with:
@@ -40,6 +42,8 @@ def plot_data(data, xaxis='Epoch', value="AverageEpRet", condition="Condition1",
     Changes the colorscheme and the default legend style, though.
     """
     plt.legend(loc='best').set_draggable(True)
+    plt.legend(loc='upper left', ncol=3, handlelength=1,
+              borderaxespad=0., prop={'size': 7})
 
     """
     For the version of the legend used in the Spinning Up benchmarking page, 
@@ -73,7 +77,7 @@ def get_datasets(logdir, condition=None):
                 config_path = open(os.path.join(root,'config.json'))
                 config = json.load(config_path)
                 if 'exp_name' in config:
-                    exp_name = config['exp_name']
+                    exp_name = config['exp_name'].split('_')[4] + '_' + config['exp_name'].split('_')[5]
             except:
                 print('No file named config.json')
             condition1 = condition or exp_name or 'exp'
@@ -96,6 +100,7 @@ def get_datasets(logdir, condition=None):
             exp_data.insert(len(exp_data.columns),'Condition1',condition1)
             exp_data.insert(len(exp_data.columns),'Condition2',condition2)
             exp_data.insert(len(exp_data.columns),'Reward_Performance',exp_data[reward_performance])
+            # if exp_data[cost_performance]:
             if cost_performance in exp_data:
                 exp_data.insert(len(exp_data.columns),'Cost_Performance',exp_data[cost_performance])
             if cost_rate_performance in exp_data:
@@ -160,7 +165,8 @@ def make_plots(all_logdirs, legend=None, xaxis=None, values=[], count=False,
     # create a separate folder for each plot 
     # results_dir = osp.join(results_dir, title)
     data = get_all_datasets(all_logdirs, legend, select, exclude)
-    
+    # values = values if isinstance(values, list) else [values]
+
     if reward_flag:
         values.append('Reward_Performance')
     if cost_flag:
@@ -172,11 +178,7 @@ def make_plots(all_logdirs, legend=None, xaxis=None, values=[], count=False,
     for value in values:
         subdir = title + '/'
         plt.figure()
-        try:
-            plot_data(data, xaxis=xaxis, value=value, condition=condition, smooth=smooth, estimator=estimator)
-        except:
-            print(f"this key {value} is not in the data")
-            break
+        plot_data(data, xaxis=xaxis, value=value, condition=condition, smooth=smooth, estimator=estimator)
         # make direction for save figure
         final_dir = osp.join(results_dir, subdir)
         existence = os.path.exists(final_dir)

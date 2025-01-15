@@ -294,6 +294,7 @@ def cpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     env = env_fn()
     obs_dim = env.observation_space.shape
     act_dim = env.g1_controller.cmd.shape
+    decimation = env.g1_controller.control_decimation
 
     # Create actor-critic module
     ac = actor_critic(env.observation_space, env.action_space, act_dim, **ac_kwargs).to(device)
@@ -307,7 +308,9 @@ def cpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     # Set up experience buffer
     local_steps_per_epoch = int(steps_per_epoch / num_procs())
-    buf = CPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
+    data_num = local_steps_per_epoch // decimation
+    assert local_steps_per_epoch % decimation == 0, 'steps_per_epoch should be divisible by control_decimation'
+    buf = CPOBuffer(obs_dim, act_dim, data_num, gamma, lam)
  
     
     def compute_kl_pi(data, cur_pi):
@@ -545,25 +548,18 @@ def cpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     ep_cost_ret, ep_cost = 0, 0
     cum_cost = 0
 
+    a = None
+
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
         for t in range(local_steps_per_epoch):
             step_start = time.time()
-            
-            a, v, vc, logp, mu, logstd = ac.step(torch.as_tensor(o, dtype=torch.float32))
+            if t % decimation == 0:
+                a, v, vc, logp, mu, logstd = ac.step(torch.as_tensor(o, dtype=torch.float32))
 
-            try: 
-                rets = env.step(a)
-                if len(rets) == 4:
-                    next_o, r, d, info = rets
-                else:
-                    next_o, r, d1, d2, info = rets
-                    d = d1 or d2
-                assert 'cost' in info.keys()
-            except: 
-                # simulation exception discovered, discard this episode 
-                next_o, r, d = o, 0, True # observation will not change, no reward when episode done 
-                info['cost'] = 0 # no cost when episode done     
+            next_o, r, d, info = env.step(a)
+            assert 'cost' in info.keys()
+
             # Track cumulative cost over training
             cum_cost += info['cost']
             ep_ret += r
@@ -572,8 +568,9 @@ def cpo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             ep_len += 1
 
             # save and log
-            buf.store(o, a, r, v, logp, info['cost'], vc, mu, logstd)
-            logger.store(VVals=v)
+            if t % decimation == 0:
+                buf.store(o, a, r, v, logp, info['cost'], vc, mu, logstd)
+                logger.store(VVals=v)
             
             # Update obs (critical!)
             o = next_o
@@ -680,7 +677,7 @@ if __name__ == '__main__':
     logger_kwargs = setup_logger_kwargs(exp_name, args.seed)
 
     # whether to save model
-    model_save = True if args.model_save else False
+    model_save = True
 
     cpo(lambda : create_env(args), actor_critic=core.MLPActorCritic,
         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma, 

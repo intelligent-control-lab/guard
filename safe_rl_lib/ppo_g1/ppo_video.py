@@ -50,6 +50,8 @@ def replay(env_fn, model_path=None, video_name=None, max_epoch=1, seed=0):
     # evaluate the model 
     while True:
         step_start = time.time()
+
+        print('time_step:', time_step, 'epoch:', epoch)
         
         time_step += 1
         if d:
@@ -82,7 +84,7 @@ def replay(env_fn, model_path=None, video_name=None, max_epoch=1, seed=0):
 
     # save video 
     fps = 60
-    dsize = (1080,1920)
+    dsize = (720,720)
     out_path = '../video'
     existence = os.path.exists(out_path)
     if not existence:
