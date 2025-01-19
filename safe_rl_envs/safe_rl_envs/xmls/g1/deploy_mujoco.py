@@ -71,9 +71,9 @@ class G1Controller():
         # load policy
         self.policy = torch.jit.load(self.policy_path)
 
-    def step(self, d, action):
+    def step(self, qpos, qvel, action):
         
-        tau = pd_control(self.target_dof_pos, d.qpos[7:], self.kps, np.zeros_like(self.kds), d.qvel[6:], self.kds)
+        tau = pd_control(self.target_dof_pos, qpos[7:], self.kps, np.zeros_like(self.kds), qvel[6:], self.kds)
         # d.ctrl[:] = tau
         # action = tau
         self.counter += 1
@@ -82,10 +82,10 @@ class G1Controller():
             # Apply control signal here.
 
             # create observation
-            qj = d.qpos[7:]
-            dqj = d.qvel[6:]
-            quat = d.qpos[3:7]
-            omega = d.qvel[3:6]
+            qj = qpos[7:]
+            dqj = qvel[6:]
+            quat = qpos[3:7]
+            omega = qvel[3:6]
 
             qj = (qj - self.default_angles) * self.dof_pos_scale
             dqj = dqj * self.dof_vel_scale

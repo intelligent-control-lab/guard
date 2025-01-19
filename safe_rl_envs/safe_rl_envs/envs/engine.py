@@ -583,7 +583,9 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 force = [force[i,0] for i in range(3)]
                 self.data.xfrc_applied[self.data.body(propeller).id,:] = force + torque
         elif "g1" in self.robot_base:
-            self.data.ctrl[:] = self.g1_controller.step(copy.deepcopy(self.data), action)
+            qpos = self.data.qpos.copy()
+            qvel = self.data.qvel.copy()
+            self.data.ctrl[:] = self.g1_controller.step(qpos, qvel, action)
         else:
             action_range = self.model.actuator_ctrlrange
             # action_scale = action_range[:,1] - action_range[:, 0]

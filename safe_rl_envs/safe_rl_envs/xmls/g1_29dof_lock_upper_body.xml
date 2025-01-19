@@ -1,4 +1,5 @@
 <mujoco model="g1_29dof_lock_upper_body">
+  <option timestep="0.005"/>
   <compiler angle="radian" meshdir="g1/meshes/"/>
 
   <statistic meansize="0.144785" extent="1.23314" center="0.025392 2.0634e-05 -0.245975"/>

@@ -217,34 +217,9 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     # Instantiate environment
     env = env_fn()
 
-    # config = {
-    #     # robot setting
-    #     'robot_base': 'xmls/g1_29dof_lock_upper_body.xml',  
-
-    #     # task setting
-    #     'task': 'goal',
-    #     'goal_size': 0.5,
-
-    #     # observation setting
-    #     'observe_goal_comp': True,  # Observe the goal with a lidar sensor
-    #     'observe_hazards': True,  # Observe the vector from agent to hazards
-        
-    #     # constraint setting
-    #     'constrain_hazards': True,  # Constrain robot from being in hazardous areas
-    #     'constrain_indicator': False,  # If true, all costs are either 1 or 0 for a given step. If false, then we get dense cost.
-
-    #     # lidar setting
-    #     'lidar_num_bins': 16,
-        
-    #     # object setting
-    #     'hazards_num': 8,
-    #     'hazards_size': 0.3,
-    #     'frameskip_binom_n': 1.0,
-    # }
-    # env = Engine(config)
-
     obs_dim = env.observation_space.shape
     act_dim = env.g1_controller.cmd.shape
+    decimation = env.g1_controller.control_decimation
 
     # Create actor-critic module
     ac = actor_critic(env.observation_space, env.action_space, act_dim, **ac_kwargs).to(device)
@@ -258,7 +233,9 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     # Set up experience buffer
     local_steps_per_epoch = int(steps_per_epoch / num_procs())
-    buf = PPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
+    data_num = local_steps_per_epoch // decimation
+    assert local_steps_per_epoch % decimation == 0, 'steps_per_epoch should be divisible by control_decimation'
+    buf = PPOBuffer(obs_dim, act_dim, data_num, gamma, lam)
 
     # Set up function for computing PPO policy loss
     def compute_loss_pi(data):
@@ -332,18 +309,14 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     start_time = time.time()
     o, ep_ret, ep_len = env.reset(), 0, 0
 
-    # last_a = None
+    a = None
 
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
         for t in range(local_steps_per_epoch):
             step_start = time.time()
-            
-            # if t % 100 == 0:
-            a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
-            # last_a = a.copy()
-            # else:
-            #     a = last_a.copy()
+            if t % decimation == 0:
+                a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
             
             try:
                 next_o, r, d, info = env.step(a)
@@ -354,8 +327,9 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             ep_len += 1
 
             # save and log
-            buf.store(o, a, r, v, logp)
-            logger.store(VVals=v)
+            if t % decimation == 0:
+                buf.store(o, a, r, v, logp)
+                logger.store(VVals=v)
             
             # Update obs (critical!)
             o = next_o
@@ -416,7 +390,7 @@ def create_env(args):
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()    
-    parser.add_argument('--task', type=str, default='Goal_Point')
+    parser.add_argument('--task', type=str, default='Goal_G1_8Hazards')
     parser.add_argument('--hazards_size', type=float, default=0.30)  # the default hazard size of safety gym 
     parser.add_argument('--hid', type=int, default=64)
     parser.add_argument('--l', type=int, default=2)
