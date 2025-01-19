@@ -12,6 +12,7 @@ from safe_rl_envs.envs.world import World, Robot
 from safe_rl_envs import G1Controller
 import time
 from .engine_utils import *
+import copy
 
 
 # Distinct colors for different types of objects.
@@ -582,7 +583,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 force = [force[i,0] for i in range(3)]
                 self.data.xfrc_applied[self.data.body(propeller).id,:] = force + torque
         elif "g1" in self.robot_base:
-            self.data.ctrl[:] = self.g1_controller.step(self.data, action)
+            self.data.ctrl[:] = self.g1_controller.step(copy.deepcopy(self.data), action)
         else:
             action_range = self.model.actuator_ctrlrange
             # action_scale = action_range[:,1] - action_range[:, 0]
